@@ -1,0 +1,71 @@
+# Task Plan: BLE Notification Sync 开源项目
+
+## Goal
+创建一个跨平台 BLE 闹钟通知同步开源项目，包含协议规范、Android SDK、Windows 端和 macOS 端。
+
+## Current Phase
+Phase 1
+
+## Phases
+
+### Phase 1: 协议规范文档
+- [ ] 编写 protocol.md 协议规范文档
+- [ ] 定义 GATT 服务和 Characteristic
+- [ ] 定义数据帧格式和消息类型
+- [ ] 定义配对流程
+- **Status:** in_progress
+
+### Phase 2: Android SDK (Kotlin)
+- [ ] 创建 Android 项目结构
+- [ ] 实现协议层（分片/重组/帧解析）
+- [ ] 实现 BLE 通信层（GATT 连接/MTU 协商）
+- [ ] 实现 SDK API（startPairing/setReminder/sendNotification）
+- [ ] 编写单元测试
+- **Status:** pending
+
+### Phase 3: Windows 端 (C# .NET)
+- [ ] 创建 .NET 项目结构
+- [ ] 实现 GATT Server
+- [ ] 实现通知适配层（Toast）
+- [ ] 实现配对存储
+- [ ] 实现 WinForms 托盘 UI
+- **Status:** pending
+
+### Phase 4: macOS 端 (Swift)
+- [ ] 创建 Xcode 项目结构
+- [ ] 实现 CBPeripheralManager
+- [ ] 实现通知服务（UserNotifications）
+- [ ] 实现配对存储
+- [ ] 实现 SwiftUI MenuBarExtra UI
+- **Status:** pending
+
+### Phase 5: 联调测试
+- [ ] Android ↔ Windows 互通测试
+- [ ] Android ↔ macOS 互通测试
+- [ ] 编写 README 和集成文档
+- **Status:** pending
+
+## Key Questions
+1. 协议字段是否需要 version 字段预留未来扩展？
+2. 图标传输是否需要压缩（减少传输时间）？
+3. Windows/macOS 是否需要支持多手机同时绑定？
+
+## Decisions Made
+| Decision | Rationale |
+|----------|-----------|
+| 仅 Mode B（闹钟推送） | MVP 范围聚焦，不需要通知监听权限 |
+| 无保活，用完即断 | 简化架构，降低功耗 |
+| 二维码配对 | 避免蓝牙乱推送，无需 PC 二次确认 |
+| 纯 Kotlin SDK | 现代 Android 开发首选，Java 可直接调用 |
+| WinForms 托盘 | 开发量最少，几行代码实现托盘 |
+| SwiftUI MenuBarExtra | macOS 13+，代码量比 AppKit 少 70% |
+
+## Errors Encountered
+| Error | Attempt | Resolution |
+|-------|---------|------------|
+| (none yet) | - | - |
+
+## Notes
+- 原始方案文档保留在 `docs/reference/original-scheme.md`
+- 设计文档在 `docs/superpowers/specs/2026-07-10-ble-notification-sync-design.md`
+- 实现规划在 `docs/superpowers/plans/`

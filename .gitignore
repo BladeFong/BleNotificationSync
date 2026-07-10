@@ -1,0 +1,34 @@
+# Android
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+android/build/
+android/sdk/build/
+android/sample/build/
+
+# Windows
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+
+# macOS
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log

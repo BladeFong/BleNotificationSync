@@ -30,5 +30,8 @@ build/
 .vscode/
 .idea/
 
+# MiMoCode
+.mimocode/
+
 # Logs
 *.log

@@ -53,6 +53,7 @@ public class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         ShowInTaskbar = false;
         WindowState = FormWindowState.Minimized;
+        Icon = CreateBellIcon();
 
         var titleLabel = new Label
         {
@@ -158,10 +159,13 @@ public class MainForm : Form
         quitItem.Click += (s, e) => QuitApplication();
         _trayMenu.Items.Add(quitItem);
 
+        // Create blue bell icon dynamically
+        var bellIcon = CreateBellIcon();
+
         _trayIcon = new NotifyIcon
         {
             Text = IsChinese ? "BLE 通知同步" : "BLE Notification Sync",
-            Icon = SystemIcons.Information,
+            Icon = bellIcon,
             ContextMenuStrip = _trayMenu,
             Visible = true
         };
@@ -213,6 +217,43 @@ public class MainForm : Form
         try { _trayIcon.Visible = false; } catch { }
         try { _trayIcon.Dispose(); } catch { }
         Application.Exit();
+    }
+
+    private static Icon CreateBellIcon()
+    {
+        var bmp = new Bitmap(32, 32);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(Color.Transparent);
+
+        // Bell body (blue)
+        using var bellBrush = new SolidBrush(Color.FromArgb(59, 130, 246));
+        var bellPath = new System.Drawing.Drawing2D.GraphicsPath();
+        bellPath.AddArc(10, 4, 12, 12, 180, 180);  // top curve
+        bellPath.AddLine(10, 10, 10, 22);           // left side
+        bellPath.AddLine(10, 22, 22, 22);           // bottom
+        bellPath.AddLine(22, 22, 22, 10);           // right side
+        bellPath.CloseFigure();
+        g.FillPath(bellBrush, bellPath);
+
+        // Bell rim (darker blue)
+        using var rimBrush = new SolidBrush(Color.FromArgb(30, 64, 175));
+        g.FillRectangle(rimBrush, 7, 22, 18, 3);
+
+        // Clapper
+        using var clapperBrush = new SolidBrush(Color.FromArgb(30, 64, 175));
+        g.FillEllipse(clapperBrush, 13, 25, 6, 5);
+
+        // BLE signal waves (light blue)
+        using var wavePen = new Pen(Color.FromArgb(147, 197, 253), 1.5f);
+        g.DrawArc(wavePen, 20, 2, 8, 8, 315, 90);
+        g.DrawArc(wavePen, 22, 0, 10, 10, 315, 90);
+
+        // Highlight
+        using var highlightBrush = new SolidBrush(Color.FromArgb(60, 255, 255, 255));
+        g.FillEllipse(highlightBrush, 12, 7, 4, 6);
+
+        return Icon.FromHandle(bmp.GetHicon());
     }
 
     private async void StartServer()

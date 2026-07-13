@@ -9,11 +9,17 @@
 
 ### 技术选型
 
-| 平台 | 语言 | UI 框架 |
-|------|------|---------|
-| Android SDK | Kotlin | 无（纯 SDK） |
-| Windows | C# / .NET 8 | WinForms + NotifyIcon |
-| macOS | Swift | SwiftUI MenuBarExtra |
+| 平台 | 语言 | UI 框架 | 最低版本 |
+|------|------|---------|----------|
+| Android SDK | Kotlin | 无（纯 SDK） | API 23 (Android 6.0) |
+| Windows | C# / .NET 8 | WinForms + NotifyIcon | Windows 10 1709+ (Build 16299) |
+| macOS | Swift | SwiftUI MenuBarExtra | macOS 13 (Ventura) |
+
+**Android API 23 选择理由**：
+- 覆盖 99.2% 活跃设备
+- 避开 Camera2 早期 bug（API 21-22）
+- 运行时权限模型成熟（相机、蓝牙权限更规范）
+- BLE GATT / MTU 完整支持
 
 ---
 
@@ -86,7 +92,18 @@
 
 #### ICON_DATA
 
-图标 Base64 分片，每片最大 240 字节。
+图标二进制直传（不做 Base64 编码），每片最大 239 字节。
+
+**帧格式**：
+```
++--------+--------+--------+--------+-------------------+
+| Magic  | MsgType| Seq    |TotalSeq| IconData          |
+| 2B     | 1B     | 1B     | 1B     | 0~239B            |
+| 0xAA 0xBB|      |        |        | (原始二进制)       |
++--------+--------+--------+--------+-------------------+
+```
+
+**约束**：图标最大 60KB，确保 255 帧内完成传输。
 
 #### ICON_END
 
@@ -95,6 +112,116 @@
   "total_size": 12345
 }
 ```
+
+---
+
+## 2.5 加密方案
+
+### 2.5.1 加密库
+
+三端均以 **源码方式** 集成 **LibTomCrypt**，使用 **AES-CCM** 算法（推荐 CCM* 模式）。
+
+**集成方式**：
+- Android：JNI 调用 LibTomCrypt C 源码
+- Windows：直接编译 LibTomCrypt 源码（.NET P/Invoke 或 C++/CLI）
+- macOS：Swift 通过 Bridging Header 调用 LibTomCrypt C 源码
+
+### 2.5.2 密钥管理
+
+| 项目 | 说明 |
+|------|------|
+| 生成时机 | APP 绑定时 |
+| 生成方式 | 由包名 `package` 通过 KDF 派生，双方各自独立计算 |
+| 保存位置 | Android 端：APP 本地存储<br>PC/Mac 端：按 MAC 地址 + 包名管理 |
+| 密钥传递 | **不需要传输**，双方用相同算法和输入得到相同密钥 |
+
+**密钥派生算法**：
+```
+key = HKDF-SHA256(
+  salt = "BleNotificationSync",
+  info = package_name,
+  length = 32
+)
+```
+
+**说明**：双方用相同的包名和固定盐值，通过 HKDF 派生出相同的 32 字节 AES 密钥。无需传输密钥，安全性更高。
+
+### 2.5.3 通知加密流程
+
+```
++------------------+                    +------------------+
+|   Android 端     |                    |    PC/Mac 端     |
++------------------+                    +------------------+
+| 1. plaintext = JSON 通知内容          |
+|    (title, body, timestamp)          |
+| 2. 生成随机数 nonce (8-13 字节)      |
+| 3. ciphertext = AES-CCM-Encrypt(     |
+|       key, nonce, plaintext)         |
+| 4. 发送: [package | nonce | ciphertext]|
+|    (package 明文，其余加密)           |
+|         --------BLE--------->        |
+|                                      | 5. 获取连接设备 MAC |
+|                                      | 6. 解析 Package 明文|
+|                                      | 7. MAC + Package   |
+|                                      |    → 查找密钥       |
+|                                      | 8. plaintext =     |
+|                                      |    AES-CCM-Decrypt |
+|                                      |    (key, nonce,    |
+|                                      |     ciphertext)    |
++------------------+                    +------------------+
+```
+
+**安全说明**：Package 明文暴露不影响安全，因为没有密钥无法解密通知内容。
+
+### 2.5.4 数据帧格式（加密后）
+
+```
++--------+--------+--------+--------+---------+---------+-----------+
+| Magic  | MsgType| Seq    |TotalSeq| Package | Nonce   | Ciphertext
+| 2B     | 1B     | 1B     | 1B     | 变长    | 8~13B   | 变长
+| 0xAA 0xBB|      |        |        | (明文)  | (明文)  |
++--------+--------+--------+--------+---------+---------+-----------+
+```
+
+**设计说明**：
+- **Package**：APP 包名，明文传输，用于 GATT Server 查找对应密钥
+- **Nonce**：随机数，明文传输，用于 AES-CCM 解密
+- **Ciphertext**：加密的 JSON 通知内容（title、body、timestamp 等）
+
+**解密逻辑**：
+1. GATT Server 解析出 Package（明文）
+2. 用连接设备 MAC + Package 查找密钥
+3. 用密钥 + Nonce 解密 Ciphertext
+
+### 2.5.5 绑定流程（加密版）
+
+```
+Android                                    PC/Mac
+   |                                          |
+   | 1. REGISTER (明文: app_name, package)    |
+   | -------------------------------------->  |
+   |                                          | 2. 派生密钥: HKDF(package)
+   |                                          | 3. 存储: MAC + package → key
+   | 4. ACK (明文: {code: 0})                 |
+   | <--------------------------------------  |
+   | 5. 派生密钥: HKDF(package)               |
+   | 6. 保存密钥到本地                        |
+   |                                          |
+   | 7. 后续通知加密传输                      |
+   | ======================================>  |
+```
+
+**安全优势**：双方各自独立派生密钥，无需传输密钥，安全性更高。
+
+### 2.5.6 安全考虑
+
+| 场景 | 处理 |
+|------|------|
+| 重放攻击 | nonce 随机生成，每次不同 |
+| 中间人攻击 | BLE 近场限制 + QR 码绑定 |
+| 未绑定设备 | GATT Server 拒绝解密 |
+| Package 明文暴露 | 无影响，需密钥才能解密内容 |
+| 包名碰撞 | 不同 APP 用不同包名，天然隔离 |
 
 ---
 
@@ -143,7 +270,7 @@ flowchart LR
 ble://pair?mac=XX:XX:XX:XX:XX:XX&uuid=0000A1B2-0000-1000-8000-00805F9B34FB
 ```
 
-### 4.2 配对时序图
+### 4.2 配对时序图（含密钥交换）
 
 ```mermaid
 sequenceDiagram
@@ -154,12 +281,14 @@ sequenceDiagram
     A->>P: 2. 连接 GATT Server
     A->>P: 3. 请求 MTU (247)
     A->>P: 4. 发送 REGISTER (app_name, package)
-    P-->>P: 存储 APP 信息
-    A->>P: 5. 发送 ICON_DATA × N (图标分片)
-    A->>P: 6. 发送 ICON_END
+    P-->>P: 存储 APP 信息 + 生成密钥
+    P->>A: 5. 发送 ACK（含密钥，明文）
+    A-->>A: 保存密钥到本地
+    A->>P: 6. 发送 ICON_DATA × N (图标分片)
+    A->>P: 7. 发送 ICON_END
     P-->>P: 缓存图标
-    P->>A: 7. 发送 ACK
-    Note over A,P: 绑定完成
+    P->>A: 8. 发送 ACK
+    Note over A,P: 绑定完成，后续通知加密传输
 ```
 
 ### 4.3 配对状态机
@@ -188,19 +317,64 @@ flowchart TD
     G -->|失败| D
     G -->|成功| H[请求 MTU 247]
     H --> I[发送 REGISTER]
-    I --> J[发送 ICON_DATA × N]
-    J --> K[发送 ICON_END]
-    K --> L{收到 ACK?}
-    L -->|超时/失败| D
-    L -->|成功| M[回调 onPaired]
-    M --> N[SDK 存储绑定信息]
+    I --> J{收到 ACK?}
+    J -->|超时/失败| D
+    J -->|成功| K[从 ACK 获取密钥]
+    K --> K2[SDK 存储密钥]
+    K2 --> L[发送 ICON_DATA × N]
+    L --> M[发送 ICON_END]
+    M --> N{收到 ACK?}
+    N -->|超时/失败| D
+    N -->|成功| O[回调 onPaired]
+    O --> P[SDK 存储绑定信息]
 ```
 
 ---
 
 ## 5. SDK API 设计
 
-### 5.1 配对 API
+### 5.1 扫码分层设计
+
+SDK 提供三层扫码能力，APP 根据需求选择：
+
+| 层级 | 组件 | 说明 | 使用方式 |
+|------|------|------|----------|
+| **解码层** | `QrDecoder.parseQrCode(url)` | 二维码 URL 解析 | 必须使用 |
+| **相机层** | `QrScanner` | CameraX + ML Kit 二维码检测 | 可选，APP 自己写 UI 时使用 |
+| **UI 层** | `QrScannerFragment` | 完整扫码界面（含取景框） | 可选，直接 add 到 Activity/Fragment |
+
+**APP 使用方式**：
+
+```kotlin
+// 方式 1：直接使用 SDK 扫码 Fragment（最简单）
+val fragment = QrScannerFragment.newInstance { qrResult ->
+    // 扫码成功，qrResult 包含 mac 和 uuid
+}
+supportFragmentManager.beginTransaction()
+    .add(R.id.container, fragment)
+    .commit()
+
+// 方式 2：使用相机层，自己写 UI
+val scanner = QrScanner(activity) { qrResult ->
+    // 扫码成功
+}
+scanner.start()
+
+// 方式 3：只用解码逻辑（完全自定义）
+val result = QrDecoder.parseQrCode(scannedUrl)
+```
+
+**依赖关系**：
+
+```
+QrScannerFragment (UI 层)
+    ↓ 依赖
+QrScanner (相机层)
+    ↓ 依赖
+QrDecoder (解码层)
+```
+
+### 5.2 配对 API
 
 ```kotlin
 class BleNotificationSDK {
@@ -373,6 +547,8 @@ BleNotificationMac/
 | 闹钟触发时 BLE 断开 | 尝试重连，失败则只发本地通知 |
 | 扫码失败 | 回调 onError |
 | 配对超时 | 回调 onError，状态回退 |
+| 密钥丢失 | 重新绑定 |
+| 加密失败 | 回调 onError，不发送 |
 
 ### 8.3 PC/Mac 端
 
@@ -382,6 +558,8 @@ BleNotificationMac/
 | 多手机绑定 | 支持，每个手机独立存储 |
 | 图标传输中断 | 下次绑定时重新传输 |
 | 通知权限未授权 | 首次启动引导授权 |
+| 解密失败 | 丢弃数据，记录日志 |
+| 密钥不存在 | 拒绝解密，返回错误码 |
 
 ---
 
@@ -392,6 +570,7 @@ BleNotificationMac/
 | 模块 | 测试内容 |
 |------|----------|
 | 协议层 | 分片/重组、帧解析、消息类型编码 |
+| 加密层 | AES-CCM 加解密、密钥派生、nonce 生成 |
 | SDK API | setReminder / cancelReminder 逻辑 |
 | 配对解析 | 二维码 URL 解析 |
 
@@ -402,6 +581,8 @@ BleNotificationMac/
 | GATT 通信 | 模拟 GATT Server + 真实 Android 设备 |
 | 通知弹出 | 验证 PC/Mac 端收到数据后正确弹出通知 |
 | 分片传输 | 大数据（图标）完整传输验证 |
+| 加密传输 | 验证加密通知能正确解密 |
+| 密钥交换 | 验证绑定流程中密钥正确传递 |
 
 ### 9.3 手动测试
 
@@ -418,16 +599,22 @@ BleNotificationMac/
 
 ```
 BleNotificationSync/
+├── third_party/          # 第三方库源码
+│   └── libtomcrypt/      # LibTomCrypt 源码（MIT 许可）
 ├── android/              # Android SDK (Kotlin AAR)
 │   ├── sdk/              # SDK 核心模块
+│   │   ├── crypto/       # 加密模块 (JNI 桥接)
+│   │   └── ble/          # BLE 通信模块
 │   ├── sample/           # 示例 App
 │   └── build.gradle.kts
 ├── windows/              # Windows 端 (C# .NET)
 │   ├── BleNotificationWin/
-│   └── BleNotificationWin.sln
+│   │   ├── Crypto/       # 加密模块 (P/Invoke 桥接)
+│   │   └── BleNotificationWin.sln
 ├── macos/                # macOS 端 (Swift)
 │   ├── BleNotificationMac/
-│   └── BleNotificationMac.xcodeproj
+│   │   ├── Crypto/       # 加密模块 (Bridging Header 桥接)
+│   │   └── BleNotificationMac.xcodeproj
 ├── docs/                 # 文档
 │   ├── protocol.md       # 协议规范
 │   └── architecture.md   # 架构说明
@@ -443,7 +630,8 @@ BleNotificationSync/
 | 阶段 | 内容 | 产出 |
 |------|------|------|
 | 1 | 协议规范文档 | docs/protocol.md |
-| 2 | Windows 端实现 | 可运行的 GATT Server + 通知 |
-| 3 | Android SDK 实现 | 可集成的 AAR 库 |
-| 4 | macOS 端实现 | 可运行的 GATT Server + 通知 |
-| 5 | 联调测试 | 三端互通验证 |
+| 2 | 加密模块实现 | 三端 LibTomCrypt 集成 |
+| 3 | Android SDK 实现 | 可集成的 AAR 库（含加密） |
+| 4 | Windows 端实现 | 可运行的 GATT Server + 通知 |
+| 5 | macOS 端实现 | 可运行的 GATT Server + 通知 |
+| 6 | 联调测试 | 三端互通验证（含加密） |

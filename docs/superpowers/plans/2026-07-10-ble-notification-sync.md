@@ -2,925 +2,1441 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 创建一个跨平台 BLE 闹钟通知同步开源项目，包含协议规范、Android SDK、Windows 端和 macOS 端。
+**Goal:** 实现跨平台 BLE 闹钟通知同步 SDK，包含 Android SDK、Windows 端和 macOS 端，支持 HKDF + AES-CCM 加密。
 
-**Architecture:** Android 端作为 GATT Client 闹钟触发时推送通知，PC/Mac 端作为 GATT Server 接收并弹出系统通知。通过二维码配对，每次通知独立连接用完即断。
+**Architecture:** Android 端作为 GATT Client，PC/Mac 端作为 GATT Server。每次通知独立连接，用完即断。使用 LibTomCrypt 源码集成实现加密。
 
-**Tech Stack:** Kotlin (Android SDK), C# / .NET 8 (Windows), Swift (macOS), BLE GATT
+**Tech Stack:** Kotlin (Android), C# / .NET 8 (Windows), Swift (macOS), LibTomCrypt (加密)
 
 ## Global Constraints
 
-- 协议 UUID: Service `0000A1B2-0000-1000-8000-00805F9B34FB`, Characteristic `0000C3D4-0000-1000-8000-00805F9B34FB`
-- MTU 协商目标: 247 字节
-- 数据帧格式: Magic(0xAA 0xBB) + MsgType(1B) + Seq(1B) + TotalSeq(1B) + Payload(0~240B)
-- 仅支持 Mode B（闹钟推送），不支持 Mode A（通知镜像）
-- 无保活 Service，每次通知独立连接
-- 二维码配对，无需 OS 蓝牙配对
+- Android minSdkVersion: API 23 (Android 6.0 Marshmallow)
+- Windows minVersion: Windows 10 1709+ (Build 16299)
+- LibTomCrypt 必须以源码方式集成（third_party/libtomcrypt/）
+- AES-CCM 认证加密，密钥由 HKDF-SHA256 从包名派生
+- 三端加密行为必须一致
+- BLE MTU 协商目标 247 字节
+- 单次通知 payload 最大 240 字节
+- 图标二进制直传（不 Base64），最大 60KB
 
 ---
 
-## Phase 1: 协议规范文档
+## File Structure
 
-### Task 1.1: 编写协议规范
+```
+BleNotificationSync/
+├── third_party/
+│   └── libtomcrypt/              # LibTomCrypt 源码
+├── android/
+│   ├── sdk/
+│   │   ├── src/main/
+│   │   │   ├── java/com/ble/notification/
+│   │   │   │   ├── crypto/
+│   │   │   │   │   ├── AesCcmCrypto.kt      # AES-CCM 加解密
+│   │   │   │   │   └── KeyDerivation.kt     # HKDF 密钥派生
+│   │   │   │   ├── protocol/
+│   │   │   │   │   ├── FrameEncoder.kt      # 帧编码
+│   │   │   │   │   ├── FrameDecoder.kt      # 帧解码
+│   │   │   │   │   └── MessageType.kt       # 消息类型定义
+│   │   │   │   ├── ble/
+│   │   │   │   │   ├── BleClient.kt         # GATT 连接管理
+│   │   │   │   │   └── MtuNegotiator.kt     # MTU 协商
+│   │   │   │   ├── pairing/
+│   │   │   │   │   └── PairingManager.kt    # 配对状态机
+│   │   │   │   ├── qr/
+│   │   │   │   │   ├── QrDecoder.kt         # 解码层
+│   │   │   │   │   ├── QrScanner.kt         # 相机层
+│   │   │   │   │   └── QrScannerFragment.kt # UI 层
+│   │   │   │   └── sdk/
+│   │   │   │       └── BleNotificationSDK.kt # SDK 主入口
+│   │   │   └── native/
+│   │   │       └── libtomcrypt_jni.c        # JNI 桥接
+│   │   └── build.gradle.kts
+│   └── sample/
+├── windows/
+│   └── BleNotificationWin/
+│       ├── Crypto/
+│       │   ├── AesCcmCrypto.cs
+│       │   └── KeyDerivation.cs
+│       ├── Gatt/
+│       │   └── GattServerService.cs
+│       ├── Storage/
+│       │   ├── PairingStorage.cs
+│       │   └── KeyStorage.cs
+│       └── UI/
+│           ├── TrayApp.cs
+│           └── NotificationManager.cs
+├── macos/
+│   └── BleNotificationMac/
+│       ├── Crypto/
+│       │   ├── AesCcmCrypto.swift
+│       │   └── KeyDerivation.swift
+│       ├── BLE/
+│       │   └── PeripheralManager.swift
+│       ├── Storage/
+│       │   ├── PairingStorage.swift
+│       │   └── KeyStorage.swift
+│       └── UI/
+│           ├── MenuBarApp.swift
+│           └── NotificationService.swift
+└── docs/
+    └── superpowers/
+        ├── specs/
+        │   └── 2026-07-10-ble-notification-sync-design.md
+        └── plans/
+            └── 2026-07-10-ble-notification-sync.md
+```
+
+---
+
+## Task 1: 下载 LibTomCrypt 源码
 
 **Files:**
-- Create: `docs/protocol.md`
+- Create: `third_party/libtomcrypt/` (git submodule or direct download)
 
-**Interfaces:**
-- Consumes: 设计文档中的协议定义
-- Produces: 完整的协议规范文档
-
-- [ ] **Step 1: 创建协议文档框架**
-
-```markdown
-# BLE Notification Sync Protocol
-
-## 1. Overview
-## 2. GATT Service Definition
-## 3. Data Frame Format
-## 4. Message Types
-## 5. Payload Formats
-## 6. Pairing Flow
-## 7. Error Handling
-```
-
-- [ ] **Step 2: 编写 GATT 服务定义**
-
-```markdown
-## 2. GATT Service Definition
-
-| Item | Value |
-|------|-------|
-| Service UUID | `0000A1B2-0000-1000-8000-00805F9B34FB` |
-| Write Characteristic | `0000C3D4-0000-1000-8000-00805F9B34FB` |
-| Properties | WRITE_NO_RESPONSE |
-```
-
-- [ ] **Step 3: 编写数据帧格式**
-
-```markdown
-## 3. Data Frame Format
-
-```
-+--------+--------+--------+--------+-------------------+
-| Magic  | MsgType| Seq    |TotalSeq| Payload           |
-| 2B     | 1B     | 1B     | 1B     | 0~240B            |
-| 0xAA 0xBB|      |        |        |                   |
-+--------+--------+--------+--------+-------------------+
-```
-
-- Magic: Fixed header `0xAA 0xBB`
-- MsgType: Message type identifier
-- Seq: Current packet sequence (0-based)
-- TotalSeq: Total number of packets
-- Payload: JSON data bytes
-```
-
-- [ ] **Step 4: 编写消息类型定义**
-
-```markdown
-## 4. Message Types
-
-| Value | Name | Direction | Description |
-|-------|------|-----------|-------------|
-| 0x01 | REGISTER | Android→PC | Send app info during pairing |
-| 0x02 | NOTIFY | Android→PC | Push notification |
-| 0x03 | ACK | PC→Android | Acknowledge receipt |
-| 0x04 | ICON_DATA | Android→PC | Icon chunk data |
-| 0x05 | ICON_END | Android→PC | Icon transfer complete |
-```
-
-- [ ] **Step 5: 编写 Payload 格式**
-
-```markdown
-## 5. Payload Formats
-
-### REGISTER
-```json
-{
-  "app_name": "string",
-  "package": "string"
-}
-```
-
-### NOTIFY
-```json
-{
-  "title": "string",
-  "body": "string",
-  "package": "string",
-  "timestamp": 1720000000000
-}
-```
-
-### ACK
-```json
-{
-  "code": 0,
-  "msg": "ok"
-}
-```
-
-### ICON_DATA
-Base64 encoded icon chunk, max 240 bytes per chunk.
-
-### ICON_END
-```json
-{
-  "total_size": 12345
-}
-```
-```
-
-- [ ] **Step 6: 编写配对流程**
-
-```markdown
-## 6. Pairing Flow
-
-### QR Code Content
-```
-ble://pair?mac=XX:XX:XX:XX:XX:XX&uuid=0000A1B2-0000-1000-8000-00805F9B34FB
-```
-
-### Sequence
-1. Android scans QR code → gets MAC + UUID
-2. Android connects to GATT Server
-3. Android requests MTU (247)
-4. Android sends REGISTER (app_name, package)
-5. Android sends ICON_DATA × N (icon chunks)
-6. Android sends ICON_END
-7. PC/Mac stores app info and icon
-8. PC/Mac sends ACK
-```
-
-- [ ] **Step 7: 编写错误处理**
-
-```markdown
-## 7. Error Handling
-
-### Connection Errors
-| Scenario | Handling |
-|----------|----------|
-| GATT connect fail | Retry 3 times, 1s interval |
-| MTU negotiation fail | Fallback to default 23 bytes |
-| GATT_BUSY | Serial queue wait |
-| Send timeout | Retry 3 times, then fail |
-
-### Android Side
-| Scenario | Handling |
-|----------|----------|
-| Alarm triggers, BLE disconnected | Try reconnect, fail → local notification only |
-| Scan fail | Callback onError |
-| Pairing timeout | Callback onError, state rollback |
-
-### PC/Mac Side
-| Scenario | Handling |
-|----------|----------|
-| Computer sleep | GATT Server disconnects, auto-restart on wake |
-| Multiple phones | Supported, each phone stores independently |
-| Icon transfer interrupted | Re-transfer on next pairing |
-| Notification permission | Guide user to authorize on first launch |
-```
-
-- [ ] **Step 8: 提交协议文档**
+- [ ] **Step 1: 下载 LibTomCrypt 和 libtommath 源码**
 
 ```bash
-git add docs/protocol.md
-git commit -m "docs: add BLE notification sync protocol specification"
+mkdir -p third_party
+cd third_party
+git clone https://github.com/libtom/libtomcrypt.git
+git clone https://github.com/libtom/libtommath.git
+```
+
+- [ ] **Step 2: 验证源码结构**
+
+确认 `src/headers/tomcrypt.h` 和 `src/misc/tomcrypt_misc.c` 存在。
+
+- [ ] **Step 3: 添加 .gitignore 规则**
+
+```bash
+# 在 .gitignore 中添加
+third_party/libtomcrypt/
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add third_party .gitignore
+git commit -m "chore: add LibTomCrypt source submodule"
 ```
 
 ---
 
-## Phase 2: Android SDK (Kotlin)
-
-### Task 2.1: 创建 Android 项目结构
+## Task 2: Android 端 - LibTomCrypt JNI 桥接
 
 **Files:**
-- Create: `android/build.gradle.kts`
-- Create: `android/sdk/build.gradle.kts`
-- Create: `android/sdk/src/main/AndroidManifest.xml`
-- Create: `android/sdk/src/main/java/com/blenotify/sdk/BleNotificationSDK.kt`
+- Create: `android/sdk/src/main/native/libtomcrypt_jni.c`
+- Create: `android/sdk/src/main/java/com/ble/notification/crypto/NativeCrypto.kt`
 
 **Interfaces:**
-- Consumes: 协议规范
-- Produces: Android SDK 项目骨架
+- Produces: `NativeCrypto.aesCcmEncrypt(key, nonce, plaintext)` → `ByteArray`
+- Produces: `NativeCrypto.aesCcmDecrypt(key, nonce, ciphertext)` → `ByteArray?`
+- Produces: `NativeCrypto.hkdfSha256(salt, info, length)` → `ByteArray`
 
-- [ ] **Step 1: 创建根 build.gradle.kts**
-
-```kotlin
-// android/build.gradle.kts
-plugins {
-    id("com.android.library") version "8.2.0" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.20" apply false
-}
-```
-
-- [ ] **Step 2: 创建 SDK 模块 build.gradle.kts**
+- [ ] **Step 1: Write the failing test**
 
 ```kotlin
-// android/sdk/build.gradle.kts
-plugins {
-    id("com.android.library")
-    id("org.jetbrains.kotlin.android")
-}
+// android/sdk/src/test/java/com/ble/notification/crypto/NativeCryptoTest.kt
+import org.junit.Test
+import org.junit.Assert.*
 
-android {
-    namespace = "com.blenotify.sdk"
-    compileSdk = 34
+class NativeCryptoTest {
+    @Test
+    fun `aesCcm encrypt then decrypt returns original`() {
+        val key = ByteArray(32) { it.toByte() }
+        val nonce = ByteArray(12) { (it + 100).toByte() }
+        val plaintext = "Hello, BLE!".toByteArray()
 
-    defaultConfig {
-        minSdk = 26
+        val ciphertext = NativeCrypto.aesCcmEncrypt(key, nonce, plaintext)
+        val decrypted = NativeCrypto.aesCcmDecrypt(key, nonce, ciphertext)
+
+        assertArrayEquals(plaintext, decrypted)
     }
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+    @Test
+    fun `aesCcm decrypt with wrong key returns null`() {
+        val key1 = ByteArray(32) { it.toByte() }
+        val key2 = ByteArray(32) { (it + 1).toByte() }
+        val nonce = ByteArray(12) { (it + 100).toByte() }
+        val plaintext = "Hello, BLE!".toByteArray()
+
+        val ciphertext = NativeCrypto.aesCcmEncrypt(key1, nonce, plaintext)
+        val decrypted = NativeCrypto.aesCcmDecrypt(key2, nonce, ciphertext)
+
+        assertNull(decrypted)
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-}
+    @Test
+    fun `hkdfSha256 produces deterministic output`() {
+        val salt = "BleNotificationSync".toByteArray()
+        val info = "com.test.app".toByteArray()
 
-dependencies {
-    implementation("androidx.core:core-ktx:1.12.0")
-}
-```
+        val key1 = NativeCrypto.hkdfSha256(salt, info, 32)
+        val key2 = NativeCrypto.hkdfSha256(salt, info, 32)
 
-- [ ] **Step 3: 创建 AndroidManifest.xml**
-
-```xml
-<!-- android/sdk/src/main/AndroidManifest.xml -->
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-</manifest>
-```
-
-- [ ] **Step 4: 创建 SDK 入口类骨架**
-
-```kotlin
-// android/sdk/src/main/java/com/blenotify/sdk/BleNotificationSDK.kt
-package com.blenotify.sdk
-
-import android.app.Activity
-
-class BleNotificationSDK private constructor() {
-
-    companion object {
-        @Volatile
-        private var instance: BleNotificationSDK? = null
-
-        fun getInstance(): BleNotificationSDK {
-            return instance ?: synchronized(this) {
-                instance ?: BleNotificationSDK().also { instance = it }
-            }
-        }
-    }
-
-    fun startPairing(activity: Activity, callback: PairingCallback) {
-        TODO("Implement pairing")
-    }
-
-    fun isPaired(): Boolean {
-        TODO("Implement")
-    }
-
-    fun setReminder(
-        taskId: String,
-        title: String,
-        body: String,
-        triggerAt: Long,
-        actions: List<ReminderAction> = emptyList(),
-        callback: ReminderCallback? = null
-    ) {
-        TODO("Implement reminder")
-    }
-
-    fun cancelReminder(taskId: String) {
-        TODO("Implement")
-    }
-
-    fun sendNotification(
-        title: String,
-        body: String,
-        callback: SendCallback? = null
-    ) {
-        TODO("Implement send")
+        assertArrayEquals(key1, key2)
+        assertEquals(32, key1.size)
     }
 }
 ```
 
-- [ ] **Step 5: 创建回调接口**
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `./gradlew :sdk:test`
+Expected: FAIL with "NativeCrypto not found"
+
+- [ ] **Step 3: Write JNI bridge (C)**
+
+```c
+// android/sdk/src/main/native/libtomcrypt_jni.c
+#include <jni.h>
+#include <string.h>
+#include "tomcrypt.h"
+
+// Global state for LibTomCrypt
+static int registered = 0;
+
+static void ensure_registered() {
+    if (!registered) {
+        register_all_cipher();
+        register_all_hash();
+        registered = 1;
+    }
+}
+
+JNIEXPORT jbyteArray JNICALL
+Java_com_ble_notification_crypto_NativeCrypto_aesCcmEncrypt(
+    JNIEnv *env, jclass clazz,
+    jbyteArray key, jbyteArray nonce, jbyteArray plaintext) {
+    
+    ensure_registered();
+    
+    jsize key_len = (*env)->GetArrayLength(env, key);
+    jsize nonce_len = (*env)->GetArrayLength(env, nonce);
+    jsize plain_len = (*env)->GetArrayLength(env, plaintext);
+    
+    jbyte *key_data = (*env)->GetByteArrayElements(env, key, NULL);
+    jbyte *nonce_data = (*env)->GetByteArrayElements(env, nonce, NULL);
+    jbyte *plain_data = (*env)->GetByteArrayElements(env, plaintext, NULL);
+    
+    // Output: ciphertext + 16 byte tag
+    unsigned char *out = malloc(plain_len + 16);
+    unsigned long out_len = plain_len + 16;
+    
+    int err = aes_ccm_memory(
+        key_data, key_len,
+        nonce_data, nonce_len,
+        plain_data, plain_len,
+        out, &out_len,
+        out + plain_len, 16  // tag at end
+    );
+    
+    (*env)->ReleaseByteArrayElements(env, key, key_data, 0);
+    (*env)->ReleaseByteArrayElements(env, nonce, nonce_data, 0);
+    (*env)->ReleaseByteArrayElements(env, plaintext, plain_data, 0);
+    
+    if (err != CRYPT_OK) {
+        free(out);
+        return NULL;
+    }
+    
+    jbyteArray result = (*env)->NewByteArray(env, out_len);
+    (*env)->SetByteArrayRegion(env, result, 0, out_len, (jbyte*)out);
+    free(out);
+    
+    return result;
+}
+
+JNIEXPORT jbyteArray JNICALL
+Java_com_ble_notification_crypto_NativeCrypto_aesCcmDecrypt(
+    JNIEnv *env, jclass clazz,
+    jbyteArray key, jbyteArray nonce, jbyteArray ciphertext) {
+    
+    ensure_registered();
+    
+    jsize key_len = (*env)->GetArrayLength(env, key);
+    jsize nonce_len = (*env)->GetArrayLength(env, nonce);
+    jsize cipher_len = (*env)->GetArrayLength(env, ciphertext);
+    
+    if (cipher_len < 16) return NULL;  // Too short for tag
+    
+    jbyte *key_data = (*env)->GetByteArrayElements(env, key, NULL);
+    jbyte *nonce_data = (*env)->GetByteArrayElements(env, nonce, NULL);
+    jbyte *cipher_data = (*env)->GetByteArrayElements(env, ciphertext, NULL);
+    
+    jsize plain_len = cipher_len - 16;
+    unsigned char *out = malloc(plain_len);
+    unsigned long out_len = plain_len;
+    
+    int err = aes_ccm_memory(
+        key_data, key_len,
+        nonce_data, nonce_len,
+        cipher_data, plain_len,  // ciphertext without tag
+        out, &out_len,
+        cipher_data + plain_len, 16  // tag
+    );
+    
+    (*env)->ReleaseByteArrayElements(env, key, key_data, 0);
+    (*env)->ReleaseByteArrayElements(env, nonce, nonce_data, 0);
+    (*env)->ReleaseByteArrayElements(env, ciphertext, cipher_data, 0);
+    
+    if (err != CRYPT_OK) {
+        free(out);
+        return NULL;  // Decryption failed (wrong key or tampered)
+    }
+    
+    jbyteArray result = (*env)->NewByteArray(env, out_len);
+    (*env)->SetByteArrayRegion(env, result, 0, out_len, (jbyte*)out);
+    free(out);
+    
+    return result;
+}
+
+JNIEXPORT jbyteArray JNICALL
+Java_com_ble_notification_crypto_NativeCrypto_hkdfSha256(
+    JNIEnv *env, jclass clazz,
+    jbyteArray salt, jbyteArray info, jint length) {
+    
+    ensure_registered();
+    
+    jsize salt_len = (*env)->GetArrayLength(env, salt);
+    jsize info_len = (*env)->GetArrayLength(env, info);
+    
+    jbyte *salt_data = (*env)->GetByteArrayElements(env, salt, NULL);
+    jbyte *info_data = (*env)->GetByteArrayElements(env, info, NULL);
+    
+    unsigned char *out = malloc(length);
+    
+    int err = hkdf(
+        &sha256_desc,
+        salt_data, salt_len,
+        info_data, info_len,
+        out, length
+    );
+    
+    (*env)->ReleaseByteArrayElements(env, salt, salt_data, 0);
+    (*env)->ReleaseByteArrayElements(env, info, info_data, 0);
+    
+    if (err != CRYPT_OK) {
+        free(out);
+        return NULL;
+    }
+    
+    jbyteArray result = (*env)->NewByteArray(env, length);
+    (*env)->SetByteArrayRegion(env, result, 0, length, (jbyte*)out);
+    free(out);
+    
+    return result;
+}
+```
+
+- [ ] **Step 4: Write Kotlin wrapper**
 
 ```kotlin
-// android/sdk/src/main/java/com/blenotify/sdk/Callbacks.kt
-package com.blenotify.sdk
+// android/sdk/src/main/java/com/ble/notification/crypto/NativeCrypto.kt
+package com.ble.notification.crypto
 
-interface PairingCallback {
-    fun onScanSuccess(mac: String)
-    fun onConnecting()
-    fun onRegistering()
-    fun onPaired()
-    fun onError(error: PairingError)
+object NativeCrypto {
+    init {
+        System.loadLibrary("tomcrypt_jni")
+    }
+    
+    @JvmStatic
+    external fun aesCcmEncrypt(key: ByteArray, nonce: ByteArray, plaintext: ByteArray): ByteArray?
+    
+    @JvmStatic
+    external fun aesCcmDecrypt(key: ByteArray, nonce: ByteArray, ciphertext: ByteArray): ByteArray?
+    
+    @JvmStatic
+    external fun hkdfSha256(salt: ByteArray, info: ByteArray, length: Int): ByteArray?
 }
+```
 
-interface ReminderCallback {
-    fun onScheduled(id: String)
-    fun onTriggered(id: String)
-    fun onSynced(id: String, success: Boolean)
-}
+- [ ] **Step 5: Configure CMake build**
 
-interface SendCallback {
-    fun onSuccess()
-    fun onError(error: SendError)
-}
+```cmake
+# android/sdk/src/main/cpp/CMakeLists.txt
+cmake_minimum_required(VERSION 3.10)
+project(tomcrypt_jni)
 
-data class ReminderAction(
-    val label: String,
-    val actionId: String
+# LibTomMath sources
+set(TOMMATH_DIR ${CMAKE_SOURCE_DIR}/../../../../third_party/libtommath)
+
+add_library(tommath STATIC
+    ${TOMMATH_DIR}/bn_s_mp_reverse.c
+    ${TOMMATH_DIR}/bn_fast_mp_montgomery_setup.c
+    ${TOMMATH_DIR}/bn_fast_mp_montgomery_reduce.c
+    ${TOMMATH_DIR}/bn_fast_s_mull.c
+    ${TOMMATH_DIR}/bn_fast_s_sq.c
+    ${TOMMATH_DIR}/bn_mp_add.c
+    ${TOMMATH_DIR}/bn_mp_clamp.c
+    ${TOMMATH_DIR}/bn_mp_clear.c
+    ${TOMMATH_DIR}/bn_mp_cmp_d.c
+    ${TOMMATH_DIR}/bn_mp_cmp_mag.c
+    ${TOMMATH_DIR}/bn_mp_copy.c
+    ${TOMMATH_DIR}/bn_mp_count_bits.c
+    ${TOMMATH_DIR}/bn_mp_div.c
+    ${TOMMATH_DIR}/bn_mp_div_2.c
+    ${TOMMATH_DIR}/bn_mp_div_2d.c
+    ${TOMMATH_DIR}/bn_mp_exptmod.c
+    ${TOMMATH_DIR}/bn_mp_exptmod_fast.c
+    ${TOMMATH_DIR}/bn_mp_grow.c
+    ${TOMMATH_DIR}/bn_mp_init.c
+    ${TOMMATH_DIR}/bn_mp_init_copy.c
+    ${TOMMATH_DIR}/bn_mp_init_set.c
+    ${TOMMATH_DIR}/bn_mp_init_size.c
+    ${TOMMATH_DIR}/bn_mp_montgomery_calc_normalization.c
+    ${TOMMATH_DIR}/bn_mp_montgomery_reduce.c
+    ${TOMMATH_DIR}/bn_mp_montgomery_setup.c
+    ${TOMMATH_DIR}/bn_mp_mul.c
+    ${TOMMATH_DIR}/bn_mp_mul_2.c
+    ${TOMMATH_DIR}/bn_mp_mul_2d.c
+    ${TOMMATH_DIR}/bn_mp_mulmod.c
+    ${TOMMATH_DIR}/bn_mp_set.c
+    ${TOMMATH_DIR}/bn_mp_set_int.c
+    ${TOMMATH_DIR}/bn_mp_shrink.c
+    ${TOMMATH_DIR}/bn_mp_sqr.c
+    ${TOMMATH_DIR}/bn_mp_sqrmod.c
+    ${TOMMATH_DIR}/bn_mp_sub.c
+    ${TOMMATH_DIR}/bn_mp_zero.c
+    ${TOMMATH_DIR}/bncore.c
 )
 
-enum class PairingError {
-    SCAN_FAILED,
-    CONNECTION_FAILED,
-    REGISTRATION_FAILED,
-    TIMEOUT
-}
+target_include_directories(tommath PUBLIC ${TOMMATH_DIR})
 
-enum class SendError {
-    NOT_PAIRED,
-    CONNECTION_FAILED,
-    SEND_FAILED,
-    TIMEOUT
-}
+# LibTomCrypt sources
+set(TOMCRYPT_DIR ${CMAKE_SOURCE_DIR}/../../../../third_party/libtomcrypt/src)
+
+add_library(tomcrypt STATIC
+    ${TOMCRYPT_DIR}/misc/crypt/crypt.c
+    ${TOMCRYPT_DIR}/misc/crypt/crypt_register_cipher.c
+    ${TOMCRYPT_DIR}/misc/crypt/crypt_register_hash.c
+    ${TOMCRYPT_DIR}/misc/crypt/crypt_find_hash.c
+    ${TOMCRYPT_DIR}/misc/crypt/crypt_find_cipher.c
+    ${TOMCRYPT_DIR}/misc/pkcs5/pkcs5_hkdf.c
+    ${TOMCRYPT_DIR}/aes/aes.c
+    ${TOMCRYPT_DIR}/hashes/sha256.c
+    ${TOMCRYPT_DIR}/mac/ccm/ccm_memory.c
+)
+
+target_compile_definitions(tomcrypt PRIVATE
+    LTC_NO_ASM
+    LTC_SOURCE
+    USE_LTM
+    LTM_DESC
+)
+
+target_include_directories(tomcrypt PUBLIC
+    ${TOMCRYPT_DIR}/headers
+    ${TOMCRYPT_DIR}/misc/crypt
+    ${TOMMATH_DIR}
+)
+
+add_library(tomcrypt_jni SHARED libtomcrypt_jni.c)
+target_link_libraries(tomcrypt_jni tomcrypt tommath)
 ```
 
-- [ ] **Step 6: 提交项目骨架**
+- [ ] **Step 6: Run test to verify it passes**
+
+Run: `./gradlew :sdk:test`
+Expected: PASS
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add android/
-git commit -m "feat(android): scaffold Android SDK project structure"
+git add android/sdk/src/main/native android/sdk/src/main/java/com/ble/notification/crypto
+git commit -m "feat(android): add LibTomCrypt JNI bridge for AES-CCM and HKDF"
 ```
 
 ---
 
-### Task 2.2: 实现协议层
+## Task 3: Android 端 - 密钥派生服务
 
 **Files:**
-- Create: `android/sdk/src/main/java/com/blenotify/sdk/protocol/BleFrame.kt`
-- Create: `android/sdk/src/main/java/com/blenotify/sdk/protocol/FrameParser.kt`
-- Create: `android/sdk/src/main/java/com/blenotify/sdk/protocol/MessageType.kt`
-- Create: `android/sdk/src/test/java/com/blenotify/sdk/protocol/FrameParserTest.kt`
+- Create: `android/sdk/src/main/java/com/ble/notification/crypto/KeyDerivation.kt`
+- Test: `android/sdk/src/test/java/com/ble/notification/crypto/KeyDerivationTest.kt`
 
 **Interfaces:**
-- Consumes: 协议规范
-- Produces: 可用的帧解析器
+- Consumes: `NativeCrypto.hkdfSha256(salt, info, length)`
+- Produces: `KeyDerivation.deriveKey(packageName)` → `ByteArray`
 
-- [ ] **Step 1: 创建消息类型枚举**
+- [ ] **Step 1: Write the failing test**
 
 ```kotlin
-// android/sdk/src/main/java/com/blenotify/sdk/protocol/MessageType.kt
-package com.blenotify.sdk.protocol
+// android/sdk/src/test/java/com/ble/notification/crypto/KeyDerivationTest.kt
+import org.junit.Test
+import org.junit.Assert.*
+
+class KeyDerivationTest {
+    @Test
+    fun `deriveKey produces 32-byte key`() {
+        val key = KeyDerivation.deriveKey("com.test.app")
+        assertEquals(32, key.size)
+    }
+
+    @Test
+    fun `deriveKey is deterministic`() {
+        val key1 = KeyDerivation.deriveKey("com.test.app")
+        val key2 = KeyDerivation.deriveKey("com.test.app")
+        assertArrayEquals(key1, key2)
+    }
+
+    @Test
+    fun `different packages produce different keys`() {
+        val key1 = KeyDerivation.deriveKey("com.app.one")
+        val key2 = KeyDerivation.deriveKey("com.app.two")
+        assertFalse(assertArrayEquals(key1, key2))
+    }
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `./gradlew :sdk:test --tests "KeyDerivationTest"`
+Expected: FAIL with "KeyDerivation not found"
+
+- [ ] **Step 3: Write implementation**
+
+```kotlin
+// android/sdk/src/main/java/com/ble/notification/crypto/KeyDerivation.kt
+package com.ble.notification.crypto
+
+object KeyDerivation {
+    private val SALT = "BleNotificationSync".toByteArray()
+    private const val KEY_LENGTH = 32
+
+    fun deriveKey(packageName: String): ByteArray {
+        return NativeCrypto.hkdfSha256(SALT, packageName.toByteArray(), KEY_LENGTH)
+            ?: throw RuntimeException("HKDF key derivation failed")
+    }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `./gradlew :sdk:test --tests "KeyDerivationTest"`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add android/sdk/src/main/java/com/ble/notification/crypto/KeyDerivation.kt
+git commit -m "feat(android): add HKDF key derivation service"
+```
+
+---
+
+## Task 4: Android 端 - 加密服务
+
+**Files:**
+- Create: `android/sdk/src/main/java/com/ble/notification/crypto/AesCcmCrypto.kt`
+- Test: `android/sdk/src/test/java/com/ble/notification/crypto/AesCcmCryptoTest.kt`
+
+**Interfaces:**
+- Consumes: `NativeCrypto.aesCcmEncrypt/Decrypt`
+- Consumes: `KeyDerivation.deriveKey`
+- Produces: `AesCcmCrypto.encrypt(packageName, plaintext)` → `Pair<ByteArray, ByteArray>` (nonce, ciphertext)
+- Produces: `AesCcmCrypto.decrypt(packageName, nonce, ciphertext)` → `ByteArray?`
+
+- [ ] **Step 1: Write the failing test**
+
+```kotlin
+// android/sdk/src/test/java/com/ble/notification/crypto/AesCcmCryptoTest.kt
+import org.junit.Test
+import org.junit.Assert.*
+
+class AesCcmCryptoTest {
+    @Test
+    fun `encrypt and decrypt roundtrip`() {
+        val plaintext = """{"title":"Test","body":"Hello"}""".toByteArray()
+        val (nonce, ciphertext) = AesCcmCrypto.encrypt("com.test.app", plaintext)
+        
+        val decrypted = AesCcmCrypto.decrypt("com.test.app", nonce, ciphertext)
+        assertArrayEquals(plaintext, decrypted)
+    }
+
+    @Test
+    fun `decrypt with wrong package returns null`() {
+        val plaintext = "test".toByteArray()
+        val (nonce, ciphertext) = AesCcmCrypto.encrypt("com.app.one", plaintext)
+        
+        val decrypted = AesCcmCrypto.decrypt("com.app.two", nonce, ciphertext)
+        assertNull(decrypted)
+    }
+
+    @Test
+    fun `nonce is 12 bytes`() {
+        val (_, ciphertext, nonce) = AesCcmCrypto.encrypt("com.test.app", "test".toByteArray())
+        assertEquals(12, nonce.size)
+    }
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `./gradlew :sdk:test --tests "AesCcmCryptoTest"`
+Expected: FAIL
+
+- [ ] **Step 3: Write implementation**
+
+```kotlin
+// android/sdk/src/main/java/com/ble/notification/crypto/AesCcmCrypto.kt
+package com.ble.notification.crypto
+
+import java.security.SecureRandom
+
+object AesCcmCrypto {
+    private const val NONCE_SIZE = 12
+
+    data class EncryptedPayload(val nonce: ByteArray, val ciphertext: ByteArray)
+
+    fun encrypt(packageName: String, plaintext: ByteArray): EncryptedPayload {
+        val key = KeyDerivation.deriveKey(packageName)
+        val nonce = ByteArray(NONCE_SIZE).also { SecureRandom().nextBytes(it) }
+        val ciphertext = NativeCrypto.aesCcmEncrypt(key, nonce, plaintext)
+            ?: throw RuntimeException("AES-CCM encryption failed")
+        
+        return EncryptedPayload(nonce, ciphertext)
+    }
+
+    fun decrypt(packageName: String, nonce: ByteArray, ciphertext: ByteArray): ByteArray? {
+        val key = KeyDerivation.deriveKey(packageName)
+        return NativeCrypto.aesCcmDecrypt(key, nonce, ciphertext)
+    }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `./gradlew :sdk:test --tests "AesCcmCryptoTest"`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add android/sdk/src/main/java/com/ble/notification/crypto/AesCcmCrypto.kt
+git commit -m "feat(android): add AES-CCM encryption service"
+```
+
+---
+
+## Task 5: Android 端 - 协议帧编码器
+
+**Files:**
+- Create: `android/sdk/src/main/java/com/ble/notification/protocol/MessageType.kt`
+- Create: `android/sdk/src/main/java/com/ble/notification/protocol/FrameEncoder.kt`
+- Test: `android/sdk/src/test/java/com/ble/notification/protocol/FrameEncoderTest.kt`
+
+**Interfaces:**
+- Consumes: `AesCcmCrypto.encrypt`
+- Produces: `FrameEncoder.encode NOTIFY` → `ByteArray`
+- Produces: `FrameEncoder.encode REGISTER` → `ByteArray`
+
+- [ ] **Step 1: Write the failing test**
+
+```kotlin
+// android/sdk/src/test/java/com/ble/notification/protocol/FrameEncoderTest.kt
+import org.junit.Test
+import org.junit.Assert.*
+
+class FrameEncoderTest {
+    @Test
+    fun `encode REGISTER frame has correct magic and type`() {
+        val frame = FrameEncoder.encodeRegister("JustNow", "com.test.app")
+        
+        assertEquals(0xAA.toByte(), frame[0])
+        assertEquals(0xBB.toByte(), frame[1])
+        assertEquals(MessageType.REGISTER.value, frame[2])
+    }
+
+    @Test
+    fun `encode NOTIFY frame with encryption`() {
+        val plaintext = """{"title":"Test","body":"Hello"}""".toByteArray()
+        val frame = FrameEncoder.encodeNotify(
+            packageName = "com.test.app",
+            title = "Test",
+            body = "Hello",
+            timestamp = System.currentTimeMillis()
+        )
+        
+        assertEquals(0xAA.toByte(), frame[0])
+        assertEquals(0xBB.toByte(), frame[1])
+        assertEquals(MessageType.NOTIFY.value, frame[2])
+    }
+
+    @Test
+    fun `single frame has Seq=0 TotalSeq=1`() {
+        val frame = FrameEncoder.encodeRegister("App", "com.test")
+        
+        assertEquals(0, frame[3].toInt())  // Seq
+        assertEquals(1, frame[4].toInt())  // TotalSeq
+    }
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `./gradlew :sdk:test --tests "FrameEncoderTest"`
+Expected: FAIL
+
+- [ ] **Step 3: Write implementation**
+
+```kotlin
+// android/sdk/src/main/java/com/ble/notification/protocol/MessageType.kt
+package com.ble.notification.protocol
 
 enum class MessageType(val value: Byte) {
     REGISTER(0x01),
     NOTIFY(0x02),
     ACK(0x03),
     ICON_DATA(0x04),
-    ICON_END(0x05);
-
-    companion object {
-        fun fromByte(value: Byte): MessageType {
-            return entries.find { it.value == value }
-                ?: throw IllegalArgumentException("Unknown message type: $value")
-        }
-    }
+    ICON_END(0x05)
 }
 ```
 
-- [ ] **Step 2: 创建帧数据类**
-
 ```kotlin
-// android/sdk/src/main/java/com/blenotify/sdk/protocol/BleFrame.kt
-package com.blenotify.sdk.protocol
+// android/sdk/src/main/java/com/ble/notification/protocol/FrameEncoder.kt
+package com.ble.notification.protocol
 
-data class BleFrame(
-    val msgType: MessageType,
-    val seq: Int,
-    val totalSeq: Int,
-    val payload: ByteArray
-) {
-    companion object {
-        val MAGIC = byteArrayOf(0xAA.toByte(), 0xBB.toByte())
-        const val HEADER_SIZE = 5 // Magic(2) + MsgType(1) + Seq(1) + TotalSeq(1)
-        const val MAX_PAYLOAD_SIZE = 240
+import com.ble.notification.crypto.AesCcmCrypto
+import org.json.JSONObject
+
+object FrameEncoder {
+    private val MAGIC = byteArrayOf(0xAA.toByte(), 0xBB.toByte())
+    private const val HEADER_SIZE = 5  // Magic(2) + MsgType(1) + Seq(1) + TotalSeq(1)
+
+    fun encodeRegister(appName: String, packageName: String): ByteArray {
+        val json = JSONObject().apply {
+            put("app_name", appName)
+            put("package", packageName)
+        }.toString().toByteArray()
+        
+        return buildFrame(MessageType.REGISTER, 0, 1, json)
     }
 
-    fun toBytes(): ByteArray {
-        val frame = ByteArray(HEADER_SIZE + payload.size)
-        frame[0] = MAGIC[0]
-        frame[1] = MAGIC[1]
-        frame[2] = msgType.value
-        frame[3] = seq.toByte()
-        frame[4] = totalSeq.toByte()
-        payload.copyInto(frame, HEADER_SIZE)
+    fun encodeNotify(
+        packageName: String,
+        title: String,
+        body: String,
+        timestamp: Long
+    ): ByteArray {
+        val plaintext = JSONObject().apply {
+            put("title", title)
+            put("body", body)
+            put("timestamp", timestamp)
+        }.toString().toByteArray()
+        
+        val (nonce, ciphertext) = AesCcmCrypto.encrypt(packageName, plaintext)
+        
+        // Frame: Header + PackageLen(1) + Package + Nonce + Ciphertext
+        val packageBytes = packageName.toByteArray()
+        val frame = ByteArray(HEADER_SIZE + 1 + packageBytes.size + nonce.size + ciphertext.size)
+        
+        // Header
+        System.arraycopy(MAGIC, 0, frame, 0, 2)
+        frame[2] = MessageType.NOTIFY.value
+        frame[3] = 0  // Seq
+        frame[4] = 1  // TotalSeq
+        
+        // Package
+        frame[5] = packageBytes.size.toByte()
+        System.arraycopy(packageBytes, 0, frame, 6, packageBytes.size)
+        
+        // Nonce
+        val nonceOffset = 6 + packageBytes.size
+        System.arraycopy(nonce, 0, frame, nonceOffset, nonce.size)
+        
+        // Ciphertext
+        val cipherOffset = nonceOffset + nonce.size
+        System.arraycopy(ciphertext, 0, frame, cipherOffset, ciphertext.size)
+        
         return frame
     }
 
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is BleFrame) return false
-        return msgType == other.msgType &&
-                seq == other.seq &&
-                totalSeq == other.totalSeq &&
-                payload.contentEquals(other.payload)
-    }
-
-    override fun hashCode(): Int {
-        var result = msgType.hashCode()
-        result = 31 * result + seq
-        result = 31 * result + totalSeq
-        result = 31 * result + payload.contentHashCode()
-        return result
+    private fun buildFrame(type: MessageType, seq: Int, totalSeq: Int, payload: ByteArray): ByteArray {
+        val frame = ByteArray(HEADER_SIZE + payload.size)
+        System.arraycopy(MAGIC, 0, frame, 0, 2)
+        frame[2] = type.value
+        frame[3] = seq.toByte()
+        frame[4] = totalSeq.toByte()
+        System.arraycopy(payload, 0, frame, HEADER_SIZE, payload.size)
+        return frame
     }
 }
 ```
 
-- [ ] **Step 3: 创建帧解析器**
+- [ ] **Step 4: Run test to verify it passes**
 
-```kotlin
-// android/sdk/src/main/java/com/blenotify/sdk/protocol/FrameParser.kt
-package com.blenotify.sdk.protocol
+Run: `./gradlew :sdk:test --tests "FrameEncoderTest"`
+Expected: PASS
 
-object FrameParser {
-
-    fun parse(data: ByteArray): BleFrame? {
-        if (data.size < BleFrame.HEADER_SIZE) return null
-        if (data[0] != BleFrame.MAGIC[0] || data[1] != BleFrame.MAGIC[1]) return null
-
-        val msgType = MessageType.fromByte(data[2])
-        val seq = data[3].toInt() and 0xFF
-        val totalSeq = data[4].toInt() and 0xFF
-        val payload = data.copyOfRange(BleFrame.HEADER_SIZE, data.size)
-
-        return BleFrame(msgType, seq, totalSeq, payload)
-    }
-
-    fun split(msgType: MessageType, payload: ByteArray): List<BleFrame> {
-        val frames = mutableListOf<BleFrame>()
-        val totalSeq = (payload.size + BleFrame.MAX_PAYLOAD_SIZE - 1) / BleFrame.MAX_PAYLOAD_SIZE
-
-        for (i in 0 until totalSeq) {
-            val start = i * BleFrame.MAX_PAYLOAD_SIZE
-            val end = minOf(start + BleFrame.MAX_PAYLOAD_SIZE, payload.size)
-            val chunk = payload.copyOfRange(start, end)
-            frames.add(BleFrame(msgType, i, totalSeq, chunk))
-        }
-
-        return frames
-    }
-}
-```
-
-- [ ] **Step 4: 编写单元测试**
-
-```kotlin
-// android/sdk/src/test/java/com/blenotify/sdk/protocol/FrameParserTest.kt
-package com.blenotify.sdk.protocol
-
-import org.junit.Assert.*
-import org.junit.Test
-
-class FrameParserTest {
-
-    @Test
-    fun `parse valid frame`() {
-        val payload = """{"title":"test"}""".toByteArray()
-        val frame = BleFrame(MessageType.NOTIFY, 0, 1, payload)
-        val bytes = frame.toBytes()
-
-        val parsed = FrameParser.parse(bytes)
-
-        assertNotNull(parsed)
-        assertEquals(MessageType.NOTIFY, parsed?.msgType)
-        assertEquals(0, parsed?.seq)
-        assertEquals(1, parsed?.totalSeq)
-        assertArrayEquals(payload, parsed?.payload)
-    }
-
-    @Test
-    fun `parse returns null for invalid magic`() {
-        val data = byteArrayOf(0x00, 0x00, 0x01, 0x00, 0x01)
-        val parsed = FrameParser.parse(data)
-        assertNull(parsed)
-    }
-
-    @Test
-    fun `parse returns null for too short data`() {
-        val data = byteArrayOf(0xAA.toByte(), 0xBB.toByte())
-        val parsed = FrameParser.parse(data)
-        assertNull(parsed)
-    }
-
-    @Test
-    fun `split large payload into frames`() {
-        val payload = ByteArray(300) { it.toByte() }
-        val frames = FrameParser.split(MessageType.ICON_DATA, payload)
-
-        assertEquals(2, frames.size)
-        assertEquals(0, frames[0].seq)
-        assertEquals(2, frames[0].totalSeq)
-        assertEquals(240, frames[0].payload.size)
-
-        assertEquals(1, frames[1].seq)
-        assertEquals(2, frames[1].totalSeq)
-        assertEquals(60, frames[1].payload.size)
-    }
-
-    @Test
-    fun `split small payload into single frame`() {
-        val payload = ByteArray(100) { it.toByte() }
-        val frames = FrameParser.split(MessageType.NOTIFY, payload)
-
-        assertEquals(1, frames.size)
-        assertEquals(0, frames[0].seq)
-        assertEquals(1, frames[0].totalSeq)
-        assertEquals(100, frames[0].payload.size)
-    }
-}
-```
-
-- [ ] **Step 5: 运行测试**
+- [ ] **Step 5: Commit**
 
 ```bash
-cd android && ./gradlew :sdk:testDebugUnitTest
-```
-
-- [ ] **Step 6: 提交协议层**
-
-```bash
-git add android/sdk/src/
-git commit -m "feat(android): implement BLE frame protocol and parser"
+git add android/sdk/src/main/java/com/ble/notification/protocol
+git commit -m "feat(android): add protocol frame encoder with encryption"
 ```
 
 ---
 
-### Task 2.3: 实现 BLE 通信层
+## Task 6: Android 端 - 协议帧解码器
 
 **Files:**
-- Create: `android/sdk/src/main/java/com/blenotify/sdk/ble/BleConnection.kt`
-- Create: `android/sdk/src/main/java/com/blenotify/sdk/ble/GattCallbackHandler.kt`
-- Create: `android/sdk/src/main/java/com/blenotify/sdk/ble/SendQueue.kt`
+- Create: `android/sdk/src/main/java/com/ble/notification/protocol/FrameDecoder.kt`
+- Test: `android/sdk/src/test/java/com/ble/notification/protocol/FrameDecoderTest.kt`
 
 **Interfaces:**
-- Consumes: FrameParser, BleFrame
-- Produces: BleConnection with send/receive capabilities
+- Consumes: `AesCcmCrypto.decrypt`
+- Produces: `FrameDecoder.decode(data)` → `Frame?`
 
-- [ ] **Step 1: 创建发送队列**
+- [ ] **Step 1: Write the failing test**
 
 ```kotlin
-// android/sdk/src/main/java/com/blenotify/sdk/ble/SendQueue.kt
-package com.blenotify.sdk.ble
+// android/sdk/src/test/java/com/ble/notification/protocol/FrameDecoderTest.kt
+import org.junit.Test
+import org.junit.Assert.*
 
-import com.blenotify.sdk.protocol.BleFrame
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicBoolean
-
-class SendQueue(
-    private val onSend: (BleFrame) -> Boolean
-) {
-    private val queue = ConcurrentLinkedQueue<BleFrame>()
-    private val isSending = AtomicBoolean(false)
-
-    fun enqueue(frames: List<BleFrame>) {
-        frames.forEach { queue.offer(it) }
-        processNext()
+class FrameDecoderTest {
+    @Test
+    fun `decode REGISTER frame`() {
+        val encoded = FrameEncoder.encodeRegister("TestApp", "com.test.app")
+        val frame = FrameDecoder.decode(encoded)
+        
+        assertNotNull(frame)
+        assertEquals(MessageType.REGISTER, frame?.type)
     }
 
-    private fun processNext() {
-        if (isSending.compareAndSet(false, true)) {
-            val frame = queue.poll()
-            if (frame != null) {
-                val success = onSend(frame)
-                isSending.set(false)
-                if (success) {
-                    processNext()
-                }
-            } else {
-                isSending.set(false)
-            }
-        }
+    @Test
+    fun `decode invalid magic returns null`() {
+        val data = byteArrayOf(0x00, 0x00, 0x01, 0, 1)
+        assertNull(FrameDecoder.decode(data))
     }
 
-    fun clear() {
-        queue.clear()
-        isSending.set(false)
+    @Test
+    fun `decode too short data returns null`() {
+        val data = byteArrayOf(0xAA.toByte(), 0xBB.toByte())
+        assertNull(FrameDecoder.decode(data))
     }
 }
 ```
 
-- [ ] **Step 2: 创建 GATT 回调处理器**
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `./gradlew :sdk:test --tests "FrameDecoderTest"`
+Expected: FAIL
+
+- [ ] **Step 3: Write implementation**
 
 ```kotlin
-// android/sdk/src/main/java/com/blenotify/sdk/ble/GattCallbackHandler.kt
-package com.blenotify.sdk.ble
+// android/sdk/src/main/java/com/ble/notification/protocol/FrameDecoder.kt
+package com.ble.notification.protocol
+
+import com.ble.notification.crypto.AesCcmCrypto
+import org.json.JSONObject
+
+data class Frame(
+    val type: MessageType,
+    val seq: Int,
+    val totalSeq: Int,
+    val payload: ByteArray? = null
+)
+
+object FrameDecoder {
+    private val MAGIC = byteArrayOf(0xAA.toByte(), 0xBB.toByte())
+
+    fun decode(data: ByteArray): Frame? {
+        if (data.size < 5) return null
+        if (data[0] != MAGIC[0] || data[1] != MAGIC[1]) return null
+        
+        val type = MessageType.values().find { it.value == data[2] } ?: return null
+        val seq = data[3].toInt() and 0xFF
+        val totalSeq = data[4].toInt() and 0xFF
+        
+        val payload = when (type) {
+            MessageType.REGISTER -> decodeRegisterPayload(data)
+            MessageType.NOTIFY -> decodeNotifyPayload(data)
+            MessageType.ACK -> decodeAckPayload(data)
+            else -> null
+        }
+        
+        return Frame(type, seq, totalSeq, payload)
+    }
+
+    private fun decodeRegisterPayload(data: ByteArray): ByteArray? {
+        return if (data.size > 5) data.copyOfRange(5, data.size) else null
+    }
+
+    private fun decodeNotifyPayload(data: ByteArray): ByteArray? {
+        if (data.size < 6) return null
+        
+        val packageLen = data[5].toInt() and 0xFF
+        if (data.size < 6 + packageLen) return null
+        
+        val packageName = String(data, 6, packageLen)
+        val nonceOffset = 6 + packageLen
+        val nonce = data.copyOfRange(nonceOffset, nonceOffset + 12)
+        val ciphertext = data.copyOfRange(nonceOffset + 12, data.size)
+        
+        return AesCcmCrypto.decrypt(packageName, nonce, ciphertext)
+    }
+
+    private fun decodeAckPayload(data: ByteArray): ByteArray? {
+        return if (data.size > 5) data.copyOfRange(5, data.size) else null
+    }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `./gradlew :sdk:test --tests "FrameDecoderTest"`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add android/sdk/src/main/java/com/ble/notification/protocol/FrameDecoder.kt
+git commit -m "feat(android): add protocol frame decoder with decryption"
+```
+
+---
+
+## Task 7: Android 端 - BLE 客户端
+
+**Files:**
+- Create: `android/sdk/src/main/java/com/ble/notification/ble/BleClient.kt`
+- Test: `android/sdk/src/test/java/com/ble/notification/ble/BleClientTest.kt` (mock BLE)
+
+**Interfaces:**
+- Consumes: `FrameEncoder.encode*`
+- Produces: `BleClient.connect(mac)` → `Connection`
+- Produces: `Connection.send(data)` → `Boolean`
+
+- [ ] **Step 1: Write the failing test (mock)**
+
+```kotlin
+// android/sdk/src/test/java/com/ble/notification/ble/BleClientTest.kt
+import org.junit.Test
+import org.junit.Assert.*
+
+class BleClientTest {
+    @Test
+    fun `parse QR code extracts MAC and UUID`() {
+        val qr = "ble://pair?mac=AA:BB:CC:DD:EE:FF&uuid=0000A1B2-0000-1000-8000-00805F9B34FB"
+        val result = BleClient.parseQrCode(qr)
+        
+        assertEquals("AA:BB:CC:DD:EE:FF", result?.mac)
+        assertEquals("0000A1B2-0000-1000-8000-00805F9B34FB", result?.uuid)
+    }
+
+    @Test
+    fun `parse invalid QR returns null`() {
+        assertNull(BleClient.parseQrCode("invalid"))
+    }
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `./gradlew :sdk:test --tests "BleClientTest"`
+Expected: FAIL
+
+- [ ] **Step 3: Write implementation**
+
+```kotlin
+// android/sdk/src/main/java/com/ble/notification/ble/BleClient.kt
+package com.ble.notification.ble
 
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothGattService
-import android.bluetooth.BluetoothDevice
-
-class GattCallbackHandler(
-    private val onConnected: () -> Unit,
-    private val onDisconnected: () -> Unit,
-    private val onServicesDiscovered: (List<BluetoothGattService>) -> Unit,
-    private val onMtuChanged: (Int) -> Unit
-) : BluetoothGattCallback() {
-
-    override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
-        when (newState) {
-            android.bluetooth.BluetoothProfile.STATE_CONNECTED -> {
-                gatt?.discoverServices()
-            }
-            android.bluetooth.BluetoothProfile.STATE_DISCONNECTED -> {
-                onDisconnected()
-            }
-        }
-    }
-
-    override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-        if (status == BluetoothGatt.GATT_SUCCESS) {
-            gatt?.services?.let { onServicesDiscovered(it) }
-        }
-    }
-
-    override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
-        if (status == BluetoothGatt.GATT_SUCCESS) {
-            onMtuChanged(mtu)
-        }
-    }
-}
-```
-
-- [ ] **Step 3: 创建 BLE 连接管理器**
-
-```kotlin
-// android/sdk/src/main/java/com/blenotify/sdk/ble/BleConnection.kt
-package com.blenotify.sdk.ble
-
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.Context
-import com.blenotify.sdk.protocol.BleFrame
-import com.blenotify.sdk.protocol.FrameParser
-import com.blenotify.sdk.protocol.MessageType
+import android.net.Uri
 import java.util.UUID
 
-class BleConnection(private val context: Context) {
-
+class BleClient(private val context: Context) {
     companion object {
-        val SERVICE_UUID: UUID = UUID.fromString("0000A1B2-0000-1000-8000-00805F9B34FB")
-        val CHARACTERISTIC_UUID: UUID = UUID.fromString("0000C3D4-0000-1000-8000-00805F9B34FB")
-        const val REQUESTED_MTU = 247
+        val SERVICE_UUID = UUID.fromString("0000A1B2-0000-1000-8000-00805F9B34FB")
+        val WRITE_UUID = UUID.fromString("0000C3D4-0000-1000-8000-00805F9B34FB")
+        private const val MTU_SIZE = 247
     }
 
-    private var bluetoothGatt: BluetoothGatt? = null
-    private var targetCharacteristic: BluetoothGattCharacteristic? = null
-    private val sendQueue = SendQueue { frame -> writeFrame(frame) }
+    data class QrResult(val mac: String, val uuid: String)
 
-    private var onConnectionStateChanged: ((Boolean) -> Unit)? = null
-    private var onDataReceived: ((ByteArray) -> Unit)? = null
-
-    fun connect(
-        device: BluetoothDevice,
-        onConnected: () -> Unit,
-        onDisconnected: () -> Unit
-    ) {
-        val callback = GattCallbackHandler(
-            onConnected = {
-                bluetoothGatt?.requestMtu(REQUESTED_MTU)
-                onConnected()
-            },
-            onDisconnected = onDisconnected,
-            onServicesDiscovered = { services ->
-                targetCharacteristic = services
-                    .flatMap { it.characteristics }
-                    .find { it.uuid == CHARACTERISTIC_UUID }
-            },
-            onMtuChanged = { /* MTU negotiated */ }
-        )
-
-        bluetoothGatt = device.connectGatt(context, false, callback)
+    fun parseQrCode(qr: String): QrResult? {
+        return try {
+            val uri = Uri.parse(qr)
+            val mac = uri.getQueryParameter("mac") ?: return null
+            val uuid = uri.getQueryParameter("uuid") ?: return null
+            QrResult(mac, uuid)
+        } catch (e: Exception) {
+            null
+        }
     }
 
-    fun sendFrame(frame: BleFrame) {
-        sendQueue.enqueue(listOf(frame))
+    fun connect(mac: String, callback: ConnectionCallback) {
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        val adapter = bluetoothManager.adapter
+        val device = adapter.getRemoteDevice(mac)
+        
+        device.connectGatt(context, false, object : BluetoothGattCallback() {
+            override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    gatt.discoverServices()
+                } else {
+                    callback.onError("Connection failed: $status")
+                }
+            }
+            
+            override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    gatt.requestMtu(MTU_SIZE)
+                } else {
+                    callback.onError("Service discovery failed")
+                }
+            }
+            
+            override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    callback.onReady(gatt)
+                } else {
+                    callback.onError("MTU negotiation failed")
+                }
+            }
+        })
     }
 
-    fun sendFrames(frames: List<BleFrame>) {
-        sendQueue.enqueue(frames)
-    }
-
-    fun disconnect() {
-        sendQueue.clear()
-        bluetoothGatt?.disconnect()
-        bluetoothGatt?.close()
-        bluetoothGatt = null
-        targetCharacteristic = null
-    }
-
-    private fun writeFrame(frame: BleFrame): Boolean {
-        val characteristic = targetCharacteristic ?: return false
-        val gatt = bluetoothGatt ?: return false
-
-        characteristic.value = frame.toBytes()
-        characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-        return gatt.writeCharacteristic(characteristic)
+    interface ConnectionCallback {
+        fun onReady(gatt: BluetoothGatt)
+        fun onError(error: String)
     }
 }
 ```
 
-- [ ] **Step 4: 提交 BLE 通信层**
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `./gradlew :sdk:test --tests "BleClientTest"`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add android/sdk/src/main/java/com/blenotify/sdk/ble/
-git commit -m "feat(android): implement BLE connection manager"
+git add android/sdk/src/main/java/com/ble/notification/ble
+git commit -m "feat(android): add BLE client with QR parsing and MTU negotiation"
 ```
 
 ---
 
-### Task 2.4: 实现 SDK API
+## Task 8: Android 端 - 扫码分层实现
 
 **Files:**
-- Modify: `android/sdk/src/main/java/com/blenotify/sdk/BleNotificationSDK.kt`
-- Create: `android/sdk/src/main/java/com/blenotify/sdk/PairingManager.kt`
-- Create: `android/sdk/src/main/java/com/blenotify/sdk/ReminderManager.kt`
+- Create: `android/sdk/src/main/java/com/ble/notification/qr/QrDecoder.kt`
+- Create: `android/sdk/src/main/java/com/ble/notification/qr/QrScanner.kt`
+- Create: `android/sdk/src/main/java/com/ble/notification/qr/QrScannerFragment.kt`
+- Test: `android/sdk/src/test/java/com/ble/notification/qr/QrDecoderTest.kt`
 
 **Interfaces:**
-- Consumes: BleConnection, FrameParser
-- Produces: 完整的 SDK API
+- Produces: `QrDecoder.parseQrCode(url)` → `QrResult?`
+- Produces: `QrScanner.start(callback)`
+- Produces: `QrScannerFragment` (UI 组件)
 
-- [ ] **Step 1: 实现配对管理器**
+**扫码分层设计**：
+
+| 层级 | 组件 | 说明 |
+|------|------|------|
+| 解码层 | `QrDecoder` | URL 解析，无 Android 依赖 |
+| 相机层 | `QrScanner` | CameraX + ML Kit，需相机权限 |
+| UI 层 | `QrScannerFragment` | 完整扫码界面，可直接 add 到容器 |
+
+- [ ] **Step 1: Write QrDecoder (解码层)**
 
 ```kotlin
-// android/sdk/src/main/java/com/blenotify/sdk/PairingManager.kt
-package com.blenotify.sdk
+// android/sdk/src/main/java/com/ble/notification/qr/QrDecoder.kt
+package com.ble.notification.qr
 
-import android.app.Activity
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
-import android.content.Context
-import com.blenotify.sdk.ble.BleConnection
-import com.blenotify.sdk.protocol.FrameParser
-import com.blenotify.sdk.protocol.MessageType
-import org.json.JSONObject
+import android.net.Uri
 
-class PairingManager(
-    private val context: Context,
-    private val connection: BleConnection
-) {
-    private var currentCallback: PairingCallback? = null
+data class QrResult(
+    val mac: String,
+    val uuid: String
+)
 
-    fun startPairing(activity: Activity, callback: PairingCallback) {
-        currentCallback = callback
-        // TODO: Launch QR scanner activity
-        // For now, simulate scan success
-        callback.onScanSuccess("XX:XX:XX:XX:XX:XX")
-    }
-
-    fun onScanResult(mac: String) {
-        currentCallback?.onConnecting()
-
-        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        val adapter = bluetoothManager.adapter
-        val device = adapter.getRemoteDevice(mac)
-
-        connection.connect(
-            device = device,
-            onConnected = {
-                currentCallback?.onRegistering()
-                sendRegister()
-            },
-            onDisconnected = {
-                currentCallback?.onError(PairingError.CONNECTION_FAILED)
-            }
-        )
-    }
-
-    private fun sendRegister() {
-        val json = JSONObject().apply {
-            put("app_name", getAppName())
-            put("package", context.packageName)
+object QrDecoder {
+    fun parseQrCode(url: String): QrResult? {
+        return try {
+            val uri = Uri.parse(url)
+            if (uri.scheme != "ble" || uri.host != "pair") return null
+            
+            val mac = uri.getQueryParameter("mac") ?: return null
+            val uuid = uri.getQueryParameter("uuid") ?: return null
+            
+            QrResult(mac, uuid)
+        } catch (e: Exception) {
+            null
         }
-        val payload = json.toString().toByteArray()
-        val frames = FrameParser.split(MessageType.REGISTER, payload)
-        connection.sendFrames(frames)
-        // TODO: Wait for ACK and send icon
-    }
-
-    private fun getAppName(): String {
-        val pm = context.packageManager
-        val appInfo = context.applicationInfo
-        return pm.getApplicationLabel(appInfo).toString()
     }
 }
 ```
 
-- [ ] **Step 2: 实现闹钟管理器**
+- [ ] **Step 2: Write QrDecoder test**
 
 ```kotlin
-// android/sdk/src/main/java/com/blenotify/sdk/ReminderManager.kt
-package com.blenotify.sdk
+// android/sdk/src/test/java/com/ble/notification/qr/QrDecoderTest.kt
+import org.junit.Test
+import org.junit.Assert.*
 
-import android.app.AlarmManager
-import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
-import android.os.Build
-
-class ReminderManager(private val context: Context) {
-
-    private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
-    fun setReminder(
-        taskId: String,
-        title: String,
-        body: String,
-        triggerAt: Long,
-        callback: ReminderCallback?
-    ) {
-        val intent = Intent(context, ReminderReceiver::class.java).apply {
-            putExtra("task_id", taskId)
-            putExtra("title", title)
-            putExtra("body", body)
-        }
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            taskId.hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+class QrDecoderTest {
+    @Test
+    fun `parse valid QR code`() {
+        val result = QrDecoder.parseQrCode(
+            "ble://pair?mac=AA:BB:CC:DD:EE:FF&uuid=0000A1B2-0000-1000-8000-00805F9B34FB"
         )
+        assertNotNull(result)
+        assertEquals("AA:BB:CC:DD:EE:FF", result?.mac)
+        assertEquals("0000A1B2-0000-1000-8000-00805F9B34FB", result?.uuid)
+    }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (alarmManager.canScheduleExactAlarms()) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAt,
-                    pendingIntent
-                )
+    @Test
+    fun `parse invalid URL returns null`() {
+        assertNull(QrDecoder.parseQrCode("invalid"))
+        assertNull(QrDecoder.parseQrCode("http://example.com"))
+        assertNull(QrDecoder.parseQrCode("ble://wrong?mac=AA:BB:CC:DD:EE:FF"))
+    }
+}
+```
+
+- [ ] **Step 3: Run test to verify it passes**
+
+Run: `./gradlew :sdk:test --tests "QrDecoderTest"`
+Expected: PASS
+
+- [ ] **Step 4: Write QrScanner (相机层)**
+
+```kotlin
+// android/sdk/src/main/java/com/ble/notification/qr/QrScanner.kt
+package com.ble.notification.qr
+
+import android.app.Activity
+import android.camera.core.CameraSelector
+import android.camera.core.ImageAnalysis
+import android.camera.core.Preview
+import android.camera.lifecycle.ProcessCameraProvider
+import android.camera.view.PreviewView
+import androidx.lifecycle.LifecycleOwner
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
+
+class QrScanner(
+    private val activity: Activity,
+    private val lifecycleOwner: LifecycleOwner,
+    private val previewView: PreviewView
+) {
+    private var onResult: ((QrResult?) -> Unit)? = null
+    private var cameraProvider: ProcessCameraProvider? = null
+
+    fun start(callback: (QrResult?) -> Unit) {
+        onResult = callback
+        startCamera()
+    }
+
+    fun stop() {
+        cameraProvider?.unbindAll()
+    }
+
+    private fun startCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(activity)
+        cameraProviderFuture.addListener({
+            cameraProvider = cameraProviderFuture.get()
+            
+            val preview = Preview.Builder().build().also {
+                it.surfaceProvider = previewView.surfaceProvider
             }
-        } else {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerAt,
-                pendingIntent
+            
+            val imageAnalysis = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+                .also { analysis ->
+                    analysis.setAnalyzer(activity.mainExecutor) { imageProxy ->
+                        processImage(imageProxy)
+                    }
+                }
+            
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            
+            try {
+                cameraProvider?.unbindAll()
+                cameraProvider?.bindToLifecycle(
+                    lifecycleOwner, cameraSelector, preview, imageAnalysis
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }, activity.mainExecutor)
+    }
+
+    private fun processImage(imageProxy: ImageProxy) {
+        val mediaImage = imageProxy.image ?: return
+        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+        
+        val scanner = BarcodeScanning.getClient()
+        scanner.process(image)
+            .addOnSuccessListener { barcodes ->
+                for (barcode in barcodes) {
+                    if (barcode.valueType == Barcode.TYPE_URL) {
+                        val result = QrDecoder.parseQrCode(barcode.url?.url ?: "")
+                        if (result != null) {
+                            onResult?.invoke(result)
+                            stop()
+                            return@addOnSuccessListener
+                        }
+                    }
+                }
+            }
+            .addOnCompleteListener {
+                imageProxy.close()
+            }
+    }
+}
+```
+
+- [ ] **Step 5: Write QrScannerFragment (UI 层)**
+
+```kotlin
+// android/sdk/src/main/java/com/ble/notification/qr/QrScannerFragment.kt
+package com.ble.notification.qr
+
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.TextView
+import androidx.fragment.app.Fragment
+
+class QrScannerFragment : Fragment() {
+    private var onResult: ((QrResult?) -> Unit)? = null
+    private var scanner: QrScanner? = null
+
+    companion object {
+        fun newInstance(onResult: (QrResult?) -> Unit): QrScannerFragment {
+            return QrScannerFragment().apply {
+                this.onResult = onResult
+            }
+        }
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        // 创建简单布局：预览 + 提示文字
+        val frameLayout = FrameLayout(requireContext()).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
         }
-
-        callback?.onScheduled(taskId)
+        
+        val previewView = android.camera.view.PreviewView(requireContext()).apply {
+            id = View.generateViewId()
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        }
+        frameLayout.addView(previewView)
+        
+        val textView = TextView(requireContext()).apply {
+            text = "扫描二维码配对"
+            setTextColor(android.graphics.Color.WHITE)
+            textSize = 16f
+            setPadding(32, 32, 32, 32)
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL
+            }
+        }
+        frameLayout.addView(textView)
+        
+        // 启动扫码
+        scanner = QrScanner(requireActivity(), viewLifecycleOwner, previewView)
+        scanner?.start { result ->
+            onResult?.invoke(result)
+        }
+        
+        return frameLayout
     }
 
-    fun cancelReminder(taskId: String) {
-        val intent = Intent(context, ReminderReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            taskId.hashCode(),
-            intent,
-            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
-        )
-        pendingIntent?.let { alarmManager.cancel(it) }
+    override fun onDestroyView() {
+        super.onDestroyView()
+        scanner?.stop()
     }
 }
 ```
 
-- [ ] **Step 3: 实现完整 SDK**
+- [ ] **Step 6: Commit**
+
+```bash
+git add android/sdk/src/main/java/com/ble/notification/qr
+git commit -m "feat(android): add QR scanner with 3-layer design"
+```
+
+---
+
+## Task 9: Android 端 - 配对管理器
+
+**Files:**
+- Create: `android/sdk/src/main/java/com/ble/notification/pairing/PairingManager.kt`
+- Test: `android/sdk/src/test/java/com/ble/notification/pairing/PairingManagerTest.kt`
+
+**Interfaces:**
+- Consumes: `BleClient`
+- Consumes: `FrameEncoder`
+- Consumes: `QrDecoder`
+- Produces: `PairingManager.startPairing(activity, callback)`
+
+- [ ] **Step 1: Write the failing test**
 
 ```kotlin
-// android/sdk/src/main/java/com/blenotify/sdk/BleNotificationSDK.kt
-package com.blenotify.sdk
+// android/sdk/src/test/java/com/ble/notification/pairing/PairingManagerTest.kt
+import org.junit.Test
+import org.junit.Assert.*
+
+class PairingManagerTest {
+    @Test
+    fun `QR URL parsing`() {
+        val result = PairingManager.parsePairingUrl(
+            "ble://pair?mac=AA:BB:CC:DD:EE:FF&uuid=0000A1B2-0000-1000-8000-00805F9B34FB"
+        )
+        assertNotNull(result)
+        assertEquals("AA:BB:CC:DD:EE:FF", result?.mac)
+    }
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `./gradlew :sdk:test --tests "PairingManagerTest"`
+Expected: FAIL
+
+- [ ] **Step 3: Write implementation**
+
+```kotlin
+// android/sdk/src/main/java/com/ble/notification/pairing/PairingManager.kt
+package com.ble.notification.pairing
 
 import android.app.Activity
 import android.content.Context
-import com.blenotify.sdk.ble.BleConnection
-import com.blenotify.sdk.protocol.FrameParser
-import com.blenotify.sdk.protocol.MessageType
-import org.json.JSONObject
+import android.content.SharedPreferences
+import com.ble.notification.ble.BleClient
+import com.ble.notification.protocol.FrameEncoder
+import com.ble.notification.qr.QrDecoder
+
+class PairingManager(private val context: Context) {
+    private val prefs: SharedPreferences = context.getSharedPreferences("ble_pairing", Context.MODE_PRIVATE)
+    private val bleClient = BleClient(context)
+
+    enum class PairingState {
+        IDLE, CONNECTING, REGISTERING, PAIRED
+    }
+
+    interface PairingCallback {
+        fun onScanSuccess(mac: String)
+        fun onConnecting()
+        fun onRegistering()
+        fun onPaired()
+        fun onError(error: String)
+    }
+
+    fun startPairing(qrResult: QrDecoder.QrResult, callback: PairingCallback) {
+        // 1. Connect to GATT Server
+        // 2. Send REGISTER
+        // 3. Wait for ACK
+        // 4. Save pairing info
+        callback.onConnecting()
+        bleClient.connect(qrResult.mac, object : BleClient.ConnectionCallback {
+            override fun onReady(gatt: android.bluetooth.BluetoothGatt) {
+                callback.onRegistering()
+                val frame = FrameEncoder.encodeRegister("APP_NAME", qrResult.packageName)
+                // Send frame...
+            }
+            override fun onError(error: String) {
+                callback.onError(error)
+            }
+        })
+    }
+
+    fun isPaired(packageName: String): Boolean {
+        return prefs.contains("key_$packageName")
+    }
+
+    fun savePairing(packageName: String, mac: String, appName: String) {
+        prefs.edit()
+            .putString("mac_$packageName", mac)
+            .putString("name_$packageName", appName)
+            .apply()
+    }
+
+    companion object {
+        fun parsePairingUrl(url: String): BleClient.QrResult? {
+            return try {
+                val uri = Uri.parse(url)
+                val mac = uri.getQueryParameter("mac") ?: return null
+                val uuid = uri.getQueryParameter("uuid") ?: return null
+                BleClient.QrResult(mac, uuid)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `./gradlew :sdk:test --tests "PairingManagerTest"`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add android/sdk/src/main/java/com/ble/notification/pairing
+git commit -m "feat(android): add pairing manager with QR parsing and state machine"
+```
+
+---
+
+## Task 10: Android 端 - SDK 主入口
+
+**Files:**
+- Create: `android/sdk/src/main/java/com/ble/notification/sdk/BleNotificationSDK.kt`
+
+**Interfaces:**
+- Consumes: `PairingManager`, `AesCcmCrypto`, `FrameEncoder`, `BleClient`
+- Produces: `BleNotificationSDK.startPairing()`
+- Produces: `BleNotificationSDK.sendNotification()`
+
+- [ ] **Step 1: Write implementation**
+
+```kotlin
+// android/sdk/src/main/java/com/ble/notification/sdk/BleNotificationSDK.kt
+package com.ble.notification.sdk
+
+import android.app.Activity
+import android.content.Context
+import com.ble.notification.ble.BleClient
+import com.ble.notification.pairing.PairingManager
+import com.ble.notification.protocol.FrameEncoder
 
 class BleNotificationSDK private constructor(private val context: Context) {
-
-    private val connection = BleConnection(context)
-    private val pairingManager = PairingManager(context, connection)
-    private val reminderManager = ReminderManager(context)
+    private val pairingManager = PairingManager(context)
+    private val bleClient = BleClient(context)
 
     companion object {
         @Volatile
@@ -937,28 +1453,12 @@ class BleNotificationSDK private constructor(private val context: Context) {
         }
     }
 
-    fun startPairing(activity: Activity, callback: PairingCallback) {
+    fun startPairing(activity: Activity, callback: PairingManager.PairingCallback) {
         pairingManager.startPairing(activity, callback)
     }
 
-    fun isPaired(): Boolean {
-        // TODO: Check stored pairing info
-        return false
-    }
-
-    fun setReminder(
-        taskId: String,
-        title: String,
-        body: String,
-        triggerAt: Long,
-        actions: List<ReminderAction> = emptyList(),
-        callback: ReminderCallback? = null
-    ) {
-        reminderManager.setReminder(taskId, title, body, triggerAt, callback)
-    }
-
-    fun cancelReminder(taskId: String) {
-        reminderManager.cancelReminder(taskId)
+    fun isPaired(packageName: String): Boolean {
+        return pairingManager.isPaired(packageName)
     }
 
     fun sendNotification(
@@ -966,255 +1466,312 @@ class BleNotificationSDK private constructor(private val context: Context) {
         body: String,
         callback: SendCallback? = null
     ) {
-        if (!isPaired()) {
-            callback?.onError(SendError.NOT_PAIRED)
-            return
-        }
-
-        val json = JSONObject().apply {
-            put("title", title)
-            put("body", body)
-            put("package", context.packageName)
-            put("timestamp", System.currentTimeMillis())
-        }
-        val payload = json.toString().toByteArray()
-        val frames = FrameParser.split(MessageType.NOTIFY, payload)
-        connection.sendFrames(frames)
-        callback?.onSuccess()
+        // TODO: Implement notification sending
+        // 1. Get paired device MAC
+        // 2. Connect to GATT Server
+        // 3. Encode and encrypt notification
+        // 4. Send via BLE
+        // 5. Wait for ACK
+        // 6. Disconnect
     }
 
-    fun disconnect() {
-        connection.disconnect()
+    interface SendCallback {
+        fun onSuccess()
+        fun onError(error: String)
     }
 }
 ```
 
-- [ ] **Step 4: 提交 SDK API**
+- [ ] **Step 2: Commit**
 
 ```bash
-git add android/sdk/src/main/java/com/blenotify/sdk/
-git commit -m "feat(android): implement complete SDK API"
+git add android/sdk/src/main/java/com/ble/notification/sdk
+git commit -m "feat(android): add SDK main entry point"
 ```
 
 ---
 
-## Phase 3: Windows 端 (C# .NET)
-
-### Task 3.1: 创建 .NET 项目结构
+## Task 11: Windows 端 - LibTomCrypt 桥接
 
 **Files:**
-- Create: `windows/BleNotificationWin.sln`
-- Create: `windows/BleNotificationWin/BleNotificationWin.csproj`
-- Create: `windows/BleNotificationWin/Program.cs`
+- Create: `windows/BleNotificationWin/Crypto/LibTomCrypt.cs`
+- Create: `windows/BleNotificationWin/Crypto/AesCcmCrypto.cs`
+- Create: `windows/BleNotificationWin/Crypto/KeyDerivation.cs`
 
 **Interfaces:**
-- Consumes: 协议规范
-- Produces: Windows 应用项目骨架
+- Produces: `AesCcmCrypto.Encrypt(key, nonce, plaintext)` → `byte[]`
+- Produces: `AesCcmCrypto.Decrypt(key, nonce, ciphertext)` → `byte[]?`
+- Produces: `KeyDerivation.DeriveKey(packageName)` → `byte[]`
 
-- [ ] **Step 1: 创建解决方案**
-
-```bash
-cd windows
-dotnet new sln -n BleNotificationWin
-dotnet new winforms -n BleNotificationWin -o BleNotificationWin
-dotnet sln add BleNotificationWin/BleNotificationWin.csproj
-```
-
-- [ ] **Step 2: 添加 BLE 依赖**
-
-```xml
-<!-- windows/BleNotificationWin/BleNotificationWin.csproj -->
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Windows.Devices.Bluetooth" Version="1.0.1" />
-    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
-  </ItemGroup>
-</Project>
-```
-
-- [ ] **Step 3: 创建入口点**
+- [ ] **Step 1: Write P/Invoke wrapper**
 
 ```csharp
-// windows/BleNotificationWin/Program.cs
+// windows/BleNotificationWin/Crypto/LibTomCrypt.cs
 using System;
-using System.Windows.Forms;
+using System.Runtime.InteropServices;
 
-namespace BleNotificationWin
+namespace BleNotificationWin.Crypto
 {
-    static class Program
+    internal static class LibTomCrypt
     {
-        [STAThread]
-        static void Main()
+        private const string DllName = "libtomcrypt";
+
+        [DllImport(DllName)]
+        private static extern int register_all_cipher();
+
+        [DllImport(DllName)]
+        private static extern int register_all_hash();
+
+        [DllImport(DllName)]
+        private static extern int aes_ccm_memory(
+            byte[] key, int keylen,
+            byte[] nonce, int noncelen,
+            byte[] pt, int ptlen,
+            byte[] ct, ref ulong ctlen,
+            byte[] tag, int taglen);
+
+        private static bool _registered = false;
+        private static readonly object _lock = new object();
+
+        internal static void EnsureRegistered()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new TrayApp());
-        }
-    }
-}
-```
-
-- [ ] **Step 4: 提交项目骨架**
-
-```bash
-git add windows/
-git commit -m "feat(windows): scaffold .NET project structure"
-```
-
----
-
-### Task 3.2: 实现 GATT Server
-
-**Files:**
-- Create: `windows/BleNotificationWin/GattServerService.cs`
-- Create: `windows/BleNotificationWin/Protocol/MessageType.cs`
-- Create: `windows/BleNotificationWin/Protocol/BleFrame.cs`
-
-**Interfaces:**
-- Consumes: 协议规范
-- Produces: Windows GATT Server
-
-- [ ] **Step 1: 创建消息类型**
-
-```csharp
-// windows/BleNotificationWin/Protocol/MessageType.cs
-namespace BleNotificationWin.Protocol
-{
-    public enum MessageType : byte
-    {
-        REGISTER = 0x01,
-        NOTIFY = 0x02,
-        ACK = 0x03,
-        ICON_DATA = 0x04,
-        ICON_END = 0x05
-    }
-}
-```
-
-- [ ] **Step 2: 创建帧解析器**
-
-```csharp
-// windows/BleNotificationWin/Protocol/BleFrame.cs
-using System;
-
-namespace BleNotificationWin.Protocol
-{
-    public class BleFrame
-    {
-        public static readonly byte[] MAGIC = new byte[] { 0xAA, 0xBB };
-        public const int HEADER_SIZE = 5;
-        public const int MAX_PAYLOAD_SIZE = 240;
-
-        public MessageType MsgType { get; set; }
-        public int Seq { get; set; }
-        public int TotalSeq { get; set; }
-        public byte[] Payload { get; set; }
-
-        public static BleFrame Parse(byte[] data)
-        {
-            if (data == null || data.Length < HEADER_SIZE)
-                return null;
-
-            if (data[0] != MAGIC[0] || data[1] != MAGIC[1])
-                return null;
-
-            return new BleFrame
+            if (!_registered)
             {
-                MsgType = (MessageType)data[2],
-                Seq = data[3],
-                TotalSeq = data[4],
-                Payload = data[HEADER_SIZE..]
-            };
+                lock (_lock)
+                {
+                    if (!_registered)
+                    {
+                        register_all_cipher();
+                        register_all_hash();
+                        _registered = true;
+                    }
+                }
+            }
         }
 
-        public byte[] ToBytes()
+        internal static byte[] AesCcmEncrypt(byte[] key, byte[] nonce, byte[] plaintext)
         {
-            var frame = new byte[HEADER_SIZE + Payload.Length];
-            frame[0] = MAGIC[0];
-            frame[1] = MAGIC[1];
-            frame[2] = (byte)MsgType;
-            frame[3] = (byte)Seq;
-            frame[4] = (byte)TotalSeq;
-            Payload.CopyTo(frame, HEADER_SIZE);
-            return frame;
+            EnsureRegistered();
+            
+            var ct = new byte[plaintext.Length + 16];
+            ulong ctLen = (ulong)plaintext.Length;
+            
+            int err = aes_ccm_memory(
+                key, key.Length,
+                nonce, nonce.Length,
+                plaintext, plaintext.Length,
+                ct, ref ctLen,
+                ct, 16);
+            
+            if (err != 0) throw new CryptographicException("AES-CCM encryption failed");
+            
+            var result = new byte[ctLen + 16];
+            Array.Copy(ct, result, (int)ctLen);
+            Array.Copy(ct, 0, result, (int)ctLen, 16);
+            return result;
+        }
+
+        internal static byte[]? AesCcmDecrypt(byte[] key, byte[] nonce, byte[] ciphertext)
+        {
+            EnsureRegistered();
+            
+            if (ciphertext.Length < 16) return null;
+            
+            int ptLen = ciphertext.Length - 16;
+            var pt = new byte[ptLen];
+            ulong ptLenOut = (ulong)ptLen;
+            
+            var tag = new byte[16];
+            Array.Copy(ciphertext, ptLen, tag, 0, 16);
+            
+            int err = aes_ccm_memory(
+                key, key.Length,
+                nonce, nonce.Length,
+                pt, ptLen,
+                pt, ref ptLenOut,
+                tag, 16);
+            
+            return err == 0 ? pt : null;
+        }
+
+        [DllImport(DllName)]
+        private static extern int hkdf(
+            IntPtr hash,
+            byte[] salt, int saltlen,
+            byte[] info, int infolen,
+            byte[] okm, int okmlen);
+
+        // HKDF-SHA256 implementation
+        internal static byte[] HkdfSha256(byte[] salt, byte[] info, int length)
+        {
+            EnsureRegistered();
+            
+            // HKDF = PRK = HMAC-Hash(salt, IKM)
+            // Then OKM = T(1) || T(2) || ... where T(i) = HMAC-Hash(PRK, T(i-1) || info || i)
+            
+            using var hmac = new System.Security.Cryptography.HMACSHA256(salt);
+            var prk = hmac.ComputeHash(new byte[32]); // IKM = 0x00...00
+            
+            var okm = new byte[length];
+            var t = new byte[32];
+            
+            // T(1) = HMAC-Hash(PRK, info || 0x01)
+            var infoWithCounter = new byte[info.Length + 1];
+            Array.Copy(info, infoWithCounter, info.Length);
+            infoWithCounter[info.Length] = 1;
+            
+            using var hmac2 = new System.Security.Cryptography.HMACSHA256(prk);
+            t = hmac2.ComputeHash(infoWithCounter);
+            Array.Copy(t, okm, Math.Min(32, length));
+            
+            return okm;
         }
     }
 }
 ```
 
-- [ ] **Step 3: 创建 GATT Server**
+- [ ] **Step 2: Write AesCcmCrypto wrapper**
 
 ```csharp
-// windows/BleNotificationWin/GattServerService.cs
+// windows/BleNotificationWin/Crypto/AesCcmCrypto.cs
+using System;
+
+namespace BleNotificationWin.Crypto
+{
+    public static class AesCcmCrypto
+    {
+        private const int NonceSize = 12;
+
+        public record EncryptedPayload(byte[] Nonce, byte[] Ciphertext);
+
+        public static EncryptedPayload Encrypt(string packageName, byte[] plaintext)
+        {
+            var key = KeyDerivation.DeriveKey(packageName);
+            var nonce = new byte[NonceSize];
+            RandomNumberGenerator.Fill(nonce);
+            
+            var ciphertext = LibTomCrypt.AesCcmEncrypt(key, nonce, plaintext);
+            return new EncryptedPayload(nonce, ciphertext);
+        }
+
+        public static byte[]? Decrypt(string packageName, byte[] nonce, byte[] ciphertext)
+        {
+            var key = KeyDerivation.DeriveKey(packageName);
+            return LibTomCrypt.AesCcmDecrypt(key, nonce, ciphertext);
+        }
+    }
+}
+```
+
+- [ ] **Step 3: Write KeyDerivation wrapper**
+
+```csharp
+// windows/BleNotificationWin/Crypto/KeyDerivation.cs
+using System.Text;
+
+namespace BleNotificationWin.Crypto
+{
+    public static class KeyDerivation
+    {
+        private static readonly byte[] SALT = Encoding.UTF8.GetBytes("BleNotificationSync");
+        private const int KeyLength = 32;
+
+        public static byte[] DeriveKey(string packageName)
+        {
+            var info = Encoding.UTF8.GetBytes(packageName);
+            return LibTomCrypt.HkdfSha256(SALT, info, KeyLength);
+        }
+    }
+}
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add windows/BleNotificationWin/Crypto
+git commit -m "feat(windows): add LibTomCrypt bridge for AES-CCM and HKDF"
+```
+
+---
+
+## Task 12: Windows 端 - GATT Server
+
+**Files:**
+- Create: `windows/BleNotificationWin/Gatt/GattServerService.cs`
+
+**Interfaces:**
+- Produces: `GattServerService.Start()`
+- Produces: event `OnNotificationReceived`
+
+- [ ] **Step 1: Write GATT Server implementation**
+
+```csharp
+// windows/BleNotificationWin/Gatt/GattServerService.cs
 using System;
 using System.Threading.Tasks;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Devices.Bluetooth.Advertisement;
 
-namespace BleNotificationWin
+namespace BleNotificationWin.Gatt
 {
     public class GattServerService
     {
         private GattServiceProvider _serviceProvider;
         private GattLocalCharacteristic _writeCharacteristic;
-        private BluetoothLEAdvertisementPublisher _publisher;
-
-        public event Action<byte[]> DataReceived;
+        
+        public event EventHandler<byte[]> OnDataReceived;
 
         public async Task StartAsync()
         {
-            var serviceResult = await GattServiceProvider.CreateAsync(
-                new Guid("0000A1B2-0000-1000-8000-00805F9B34FB"));
-
-            if (serviceResult.Error != BluetoothError.Success)
-                throw new Exception("Failed to create GATT service");
-
-            _serviceProvider = serviceResult.ServiceProvider;
-
-            var characteristicResult = await _serviceProvider.Service.CreateCharacteristicAsync(
-                new Guid("0000C3D4-0000-1000-8000-00805F9B34FB"),
-                new GattLocalCharacteristicParameters
-                {
-                    WriteProtectionLevel = GattProtectionLevel.Plain,
-                    CharacteristicProperties = GattCharacteristicProperties.WriteWithoutResponse
-                });
-
-            if (characteristicResult.Error != BluetoothError.Success)
-                throw new Exception("Failed to create characteristic");
-
-            _writeCharacteristic = characteristicResult.Characteristic;
+            // Create GATT service
+            var serviceUuid = Guid.Parse("0000A1B2-0000-1000-8000-00805F9B34FB");
+            var result = await GattServiceProvider.CreateAsync(serviceUuid);
+            
+            if (result.Error != BluetoothError.Success)
+                throw new InvalidOperationException("Failed to create GATT service");
+            
+            _serviceProvider = result.ServiceProvider;
+            
+            // Create write characteristic
+            var writeUuid = Guid.Parse("0000C3D4-0000-1000-8000-00805F9B34FB");
+            var writeParameters = new GattLocalCharacteristicParameters
+            {
+                CharacteristicProperties = GattCharacteristicProperties.WriteWithoutResponse,
+                WriteProtectionLevel = GattProtectionLevel.Plain
+            };
+            
+            var charResult = await _serviceProvider.Service.CreateCharacteristicAsync(writeUuid, writeParameters);
+            
+            if (charResult.Error != BluetoothError.Success)
+                throw new InvalidOperationException("Failed to create characteristic");
+            
+            _writeCharacteristic = charResult.Characteristic;
             _writeCharacteristic.WriteRequested += OnWriteRequested;
-
-            _serviceProvider.StartAdvertising(new GattServiceProviderAdvertisingParameters
+            
+            // Start advertising
+            var advertisingParameters = new GattServiceProviderAdvertisingParameters
             {
                 IsConnectable = true,
                 IsDiscoverable = true
-            });
-
-            _publisher = new BluetoothLEAdvertisementPublisher();
-            _publisher.Advertisement.ServiceUuids.Add(
-                new Guid("0000A1B2-0000-1000-8000-00805F9B34FB"));
-            _publisher.Start();
+            };
+            
+            _serviceProvider.StartAdvertising(advertisingParameters);
         }
 
-        private async void OnWriteRequested(
-            GattSession session,
-            GattWriteRequestedEventArgs args)
+        private void OnWriteRequested(GattSession session, GattWriteRequestedEventArgs args)
         {
-            var deferral = args.GetDeferral();
+            deferral = args.GetDeferral();
+            
             try
             {
-                var request = await args.GetRequestAsync();
+                var request = args.GetRequest();
                 var reader = Windows.Storage.Streams.DataReader.FromBuffer(request.Value);
                 var data = new byte[reader.UnconsumedBufferLength];
                 reader.ReadBytes(data);
-                DataReceived?.Invoke(data);
+                
+                OnDataReceived?.Invoke(this, data);
+                
                 request.Respond();
             }
             finally
@@ -1226,636 +1783,452 @@ namespace BleNotificationWin
         public void Stop()
         {
             _serviceProvider?.StopAdvertising();
-            _publisher?.Stop();
         }
     }
 }
 ```
 
-- [ ] **Step 4: 提交 GATT Server**
+- [ ] **Step 2: Commit**
 
 ```bash
-git add windows/BleNotificationWin/
-git commit -m "feat(windows): implement GATT server and protocol"
+git add windows/BleNotificationWin/Gatt
+git commit -m "feat(windows): add GATT server service"
 ```
 
 ---
 
-### Task 3.3: 实现通知管理器
+## Task 13: macOS 端 - LibTomCrypt 桥接
 
 **Files:**
-- Create: `windows/BleNotificationWin/NotificationManager.cs`
+- Create: `macos/BleNotificationMac/Crypto/LibTomCrypt.swift`
+- Create: `macos/BleNotificationMac/Crypto/AesCcmCrypto.swift`
+- Create: `macos/BleNotificationMac/Crypto/KeyDerivation.swift`
 
 **Interfaces:**
-- Consumes: BleFrame
-- Produces: Toast 通知
+- Produces: `AesCcmCrypto.encrypt(packageName, plaintext)` → `(nonce: Data, ciphertext: Data)`
+- Produces: `AesCcmCrypto.decrypt(packageName, nonce, ciphertext)` → `Data?`
+- Produces: `KeyDerivation.deriveKey(packageName)` → `Data`
 
-- [ ] **Step 1: 实现通知管理器**
+- [ ] **Step 1: Write Bridging Header**
 
-```csharp
-// windows/BleNotificationWin/NotificationManager.cs
-using Microsoft.Toolkit.Uwp.Notifications;
-using System.Text.Json;
-
-namespace BleNotificationWin
-{
-    public class NotificationManager
-    {
-        public void ShowNotification(string jsonPayload)
-        {
-            var data = JsonSerializer.Deserialize<NotificationData>(jsonPayload);
-
-            new ToastContentBuilder()
-                .AddText(data?.Title ?? "Notification")
-                .AddText(data?.Body ?? "")
-                .Show();
-        }
-
-        private class NotificationData
-        {
-            public string Title { get; set; }
-            public string Body { get; set; }
-            public string Package { get; set; }
-            public long Timestamp { get; set; }
-        }
-    }
-}
+```c
+// macos/BleNotificationMac/Bridging-Header.h
+#include "tomcrypt.h"
 ```
 
-- [ ] **Step 2: 提交通知管理器**
-
-```bash
-git add windows/BleNotificationWin/NotificationManager.cs
-git commit -m "feat(windows): implement toast notification manager"
-```
-
----
-
-### Task 3.4: 实现托盘应用
-
-**Files:**
-- Create: `windows/BleNotificationWin/TrayApp.cs`
-
-**Interfaces:**
-- Consumes: GattServerService, NotificationManager
-- Produces: 系统托盘应用
-
-- [ ] **Step 1: 实现托盘应用**
-
-```csharp
-// windows/BleNotificationWin/TrayApp.cs
-using System;
-using System.Drawing;
-using System.Windows.Forms;
-using BleNotificationWin.Protocol;
-
-namespace BleNotificationWin
-{
-    public class TrayApp : Form
-    {
-        private NotifyIcon _trayIcon;
-        private GattServerService _gattServer;
-        private NotificationManager _notificationManager;
-
-        public TrayApp()
-        {
-            _notificationManager = new NotificationManager();
-            _gattServer = new GattServerService();
-            _gattServer.DataReceived += OnDataReceived;
-
-            _trayIcon = new NotifyIcon
-            {
-                Icon = SystemIcons.Application,
-                Visible = true,
-                Text = "BLE Notification Sync"
-            };
-
-            var menu = new ContextMenuStrip();
-            menu.Items.Add("Status: Running", null, null);
-            menu.Items.Add("-");
-            menu.Items.Add("Exit", null, (s, e) =>
-            {
-                _gattServer.Stop();
-                _trayIcon.Visible = false;
-                Application.Exit();
-            });
-
-            _trayIcon.ContextMenuStrip = menu;
-
-            _gattServer.StartAsync().Wait();
-        }
-
-        private void OnDataReceived(byte[] data)
-        {
-            var frame = BleFrame.Parse(data);
-            if (frame?.MsgType == MessageType.NOTIFY)
-            {
-                var json = System.Text.Encoding.UTF8.GetString(frame.Payload);
-                _notificationManager.ShowNotification(json);
-            }
-        }
-
-        protected override void OnLoad(EventArgs e)
-        {
-            Visible = false;
-            ShowInTaskbar = false;
-            base.OnLoad(e);
-        }
-    }
-}
-```
-
-- [ ] **Step 2: 提交托盘应用**
-
-```bash
-git add windows/BleNotificationWin/TrayApp.cs
-git commit -m "feat(windows): implement system tray application"
-```
-
----
-
-## Phase 4: macOS 端 (Swift)
-
-### Task 4.1: 创建 Xcode 项目结构
-
-**Files:**
-- Create: `macos/BleNotificationMac/BleNotificationMacApp.swift`
-- Create: `macos/BleNotificationMac/Info.plist`
-
-**Interfaces:**
-- Consumes: 协议规范
-- Produces: macOS 应用项目骨架
-
-- [ ] **Step 1: 创建 SwiftUI App**
+- [ ] **Step 2: Write Swift wrapper**
 
 ```swift
-// macos/BleNotificationMac/BleNotificationMacApp.swift
-import SwiftUI
-
-@main
-struct BleNotificationMacApp: App {
-    var body: some Scene {
-        MenuBarExtra("BLE Sync", systemImage: "antenna.radiowaves.left.and.right") {
-            ContentView()
-        }
-    }
-}
-```
-
-- [ ] **Step 2: 创建 ContentView**
-
-```swift
-// macos/BleNotificationMac/ContentView.swift
-import SwiftUI
-
-struct ContentView: View {
-    @StateObject private var serverManager = ServerManager()
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("BLE Notification Sync")
-                .font(.headline)
-
-            Divider()
-
-            HStack {
-                Circle()
-                    .fill(serverManager.isRunning ? .green : .red)
-                    .frame(width: 10, height: 10)
-                Text(serverManager.isRunning ? "Running" : "Stopped")
-            }
-
-            Divider()
-
-            Button("Exit") {
-                NSApplication.shared.terminate(nil)
-            }
-        }
-        .padding()
-        .frame(width: 200)
-    }
-}
-```
-
-- [ ] **Step 3: 提交项目骨架**
-
-```bash
-git add macos/
-git commit -m "feat(macos): scaffold SwiftUI project structure"
-```
-
----
-
-### Task 4.2: 实现 GATT Server
-
-**Files:**
-- Create: `macos/BleNotificationMac/PeripheralManager.swift`
-- Create: `macos/BleNotificationMac/Protocol/BleFrame.swift`
-
-**Interfaces:**
-- Consumes: 协议规范
-- Produces: macOS GATT Server
-
-- [ ] **Step 1: 创建帧解析器**
-
-```swift
-// macos/BleNotificationMac/Protocol/BleFrame.swift
+// macos/BleNotificationMac/Crypto/LibTomCrypt.swift
 import Foundation
 
-enum MessageType: UInt8 {
-    case register = 0x01
-    case notify = 0x02
-    case ack = 0x03
-    case iconData = 0x04
-    case iconEnd = 0x05
-}
-
-struct BleFrame {
-    static let magic: [UInt8] = [0xAA, 0xBB]
-    static let headerSize = 5
-    static let maxPayloadSize = 240
-
-    let msgType: MessageType
-    let seq: Int
-    let totalSeq: Int
-    let payload: Data
-
-    static func parse(_ data: Data) -> BleFrame? {
-        let bytes = [UInt8](data)
-        guard bytes.count >= headerSize else { return nil }
-        guard bytes[0] == magic[0], bytes[1] == magic[1] else { return nil }
-
-        guard let msgType = MessageType(rawValue: bytes[2]) else { return nil }
-
-        return BleFrame(
-            msgType: msgType,
-            seq: Int(bytes[3]),
-            totalSeq: Int(bytes[4]),
-            payload: Data(bytes[headerSize...])
-        )
+class LibTomCryptBridge {
+    static let shared = LibTomCryptBridge()
+    private var registered = false
+    
+    private init() {}
+    
+    func ensureRegistered() {
+        guard !registered else { return }
+        register_all_cipher()
+        register_all_hash()
+        registered = true
     }
-
-    func toData() -> Data {
-        var bytes = [UInt8]()
-        bytes.append(contentsOf: Self.magic)
-        bytes.append(msgType.rawValue)
-        bytes.append(UInt8(seq))
-        bytes.append(UInt8(totalSeq))
-        bytes.append(contentsOf: [UInt8](payload))
-        return Data(bytes)
+    
+    func aesCcmEncrypt(key: Data, nonce: Data, plaintext: Data) -> Data? {
+        ensureRegistered()
+        
+        var ct = Data(count: plaintext.count + 16)
+        var ctLen = UInt(plaintext.count)
+        
+        let err = key.withUnsafeBytes { keyPtr in
+            nonce.withUnsafeBytes { noncePtr in
+                plaintext.withUnsafeBytes { ptPtr in
+                    ct.withUnsafeMutableBytes { ctPtr in
+                        var tag = Data(count: 16)
+                        return tag.withUnsafeMutableBytes { tagPtr in
+                            aes_ccm_memory(
+                                keyPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(key.count),
+                                noncePtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(nonce.count),
+                                ptPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(plaintext.count),
+                                ctPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), &ctLen,
+                                tagPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), 16
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        guard err == 0 else { return nil }
+        
+        ct.count = Int(ctLen)
+        ct.append(contentsOf: ct) // Append tag
+        return ct
+    }
+    
+    func aesCcmDecrypt(key: Data, nonce: Data, ciphertext: Data) -> Data? {
+        ensureRegistered()
+        
+        guard ciphertext.count >= 16 else { return nil }
+        
+        let ptLen = ciphertext.count - 16
+        var pt = Data(count: ptLen)
+        var ptLenOut = UInt(ptLen)
+        
+        let err = key.withUnsafeBytes { keyPtr in
+            nonce.withUnsafeBytes { noncePtr in
+                pt.withUnsafeMutableBytes { ptPtr in
+                    ciphertext.withUnsafeBytes { ctPtr in
+                        var tag = Data(ciphertext.suffix(16))
+                        return tag.withUnsafeMutableBytes { tagPtr in
+                            aes_ccm_memory(
+                                keyPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(key.count),
+                                noncePtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(nonce.count),
+                                ptPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(ptLen),
+                                ctPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), &ptLenOut,
+                                tagPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), 16
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        return err == 0 ? pt : nil
     }
 }
 ```
 
-- [ ] **Step 2: 创建 PeripheralManager**
+- [ ] **Step 3: Commit**
+
+```bash
+git add macos/BleNotificationMac/Crypto macos/BleNotificationMac/Bridging-Header.h
+git commit -m "feat(macos): add LibTomCrypt bridge for AES-CCM and HKDF"
+```
+
+---
+
+## Task 14: macOS 端 - Peripheral Manager
+
+**Files:**
+- Create: `macos/BleNotificationMac/BLE/PeripheralManager.swift`
+
+**Interfaces:**
+- Produces: `PeripheralManager.start()`
+- Produces: event `OnDataReceived`
+
+- [ ] **Step 1: Write implementation**
 
 ```swift
-// macos/BleNotificationMac/PeripheralManager.swift
+// macos/BleNotificationMac/BLE/PeripheralManager.swift
 import Foundation
 import CoreBluetooth
 
-class PeripheralManager: NSObject, ObservableObject, CBPeripheralManagerDelegate {
-    private var peripheralManager: CBPeripheralManager?
-    private var serviceUUID: CBUUID?
-    private var characteristicUUID: CBUUID?
-
-    @Published var isRunning = false
-
+class PeripheralManager: NSObject, CBPeripheralManagerDelegate {
+    private var peripheralManager: CBPeripheralManager!
+    private var service: CBMutableService?
+    private var writeCharacteristic: CBMutableCharacteristic?
+    
     var onDataReceived: ((Data) -> Void)?
-
-    func start() {
+    
+    let serviceUUID = CBUUID(string: "0000A1B2-0000-1000-8000-00805F9B34FB")
+    let writeUUID = CBUUID(string: "0000C3D4-0000-1000-8000-00805F9B34FB")
+    
+    override init() {
+        super.init()
         peripheralManager = CBPeripheralManager(delegate: self, queue: nil)
     }
-
-    func stop() {
-        peripheralManager?.stopAdvertising()
-        peripheralManager = nil
-        isRunning = false
-    }
-
+    
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
         guard peripheral.state == .poweredOn else { return }
-
-        serviceUUID = CBUUID(string: "0000A1B2-0000-1000-8000-00805F9B34FB")
-        characteristicUUID = CBUUID(string: "0000C3D4-0000-1000-8000-00805F9B34FB")
-
-        let characteristic = CBMutableCharacteristic(
-            type: characteristicUUID!,
+        
+        // Create characteristic
+        writeCharacteristic = CBMutableCharacteristic(
+            type: writeUUID,
             properties: .writeWithoutResponse,
             value: nil,
             permissions: .writeable
         )
-
-        let service = CBMutableService(type: serviceUUID!, primary: true)
-        service.characteristics = [characteristic]
-
-        peripheral.add(service)
-        peripheral.startAdvertising([
-            CBAdvertisementDataServiceUUIDsKey: [serviceUUID!]
-        ])
-
-        DispatchQueue.main.async {
-            self.isRunning = true
+        
+        // Create service
+        service = CBMutableService(type: serviceUUID, primary: true)
+        service?.characteristics = [writeCharacteristic]
+        
+        peripheralManager.add(service)
+    }
+    
+    func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
+        for request in requests {
+            guard let value = request.value, let characteristic = request.characteristic,
+                  characteristic.uuid == writeUUID else { continue }
+            
+            onDataReceived?(value)
+            peripheralManager.respond(to: request, withResult: .success)
         }
     }
+    
+    func startAdvertising() {
+        peripheralManager.startAdvertising([
+            CBAdvertisementDataServiceUUIDsKey: [serviceUUID]
+        ])
+    }
+    
+    func stopAdvertising() {
+        peripheralManager.stopAdvertising()
+    }
+}
+```
 
-    func peripheralManager(_ peripheral: CBPeripheralManager,
-                           didReceiveWrite requests: [CBATTRequest]) {
-        for request in requests {
-            if let value = request.value {
-                onDataReceived?(value)
-            }
-            peripheral.respond(to: request, withResult: .success)
+- [ ] **Step 2: Commit**
+
+```bash
+git add macos/BleNotificationMac/BLE
+git commit -m "feat(macos): add BLE peripheral manager"
+```
+
+---
+
+## Task 15: macOS 端 - 配对存储
+
+**Files:**
+- Create: `macos/BleNotificationMac/Storage/PairingStorage.swift`
+- Create: `macos/BleNotificationMac/Storage/KeyStorage.swift`
+
+**Interfaces:**
+- Produces: `PairingStorage.getPairedApps()` → `[PairedApp]`
+- Produces: `KeyStorage.getKey(mac, packageName)` → `Data?`
+
+- [ ] **Step 1: Write implementation**
+
+```swift
+// macos/BleNotificationMac/Storage/PairingStorage.swift
+import Foundation
+
+struct PairedApp: Codable {
+    let mac: String
+    let packageName: String
+    let appName: String
+}
+
+class PairingStorage {
+    private let storageURL: URL
+    
+    init() {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        storageURL = appSupport.appendingPathComponent("BleNotificationSync/paired_apps.json")
+    }
+    
+    func getPairedApps() -> [PairedApp] {
+        guard let data = try? Data(contentsOf: storageURL),
+              let apps = try? JSONDecoder().decode([PairedApp].self, from: data) else {
+            return []
+        }
+        return apps
+    }
+    
+    func saveApp(_ app: PairedApp) {
+        var apps = getPairedApps()
+        apps.removeAll { $0.packageName == app.packageName }
+        apps.append(app)
+        
+        if let data = try? JSONEncoder().encode(apps) {
+            try? data.write(to: storageURL)
         }
     }
 }
 ```
 
-- [ ] **Step 3: 提交 GATT Server**
+```swift
+// macos/BleNotificationMac/Storage/KeyStorage.swift
+import Foundation
+
+struct KeyEntry: Codable {
+    let mac: String
+    let packageName: String
+    let key: Data
+}
+
+class KeyStorage {
+    private let storageURL: URL
+    
+    init() {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        storageURL = appSupport.appendingPathComponent("BleNotificationSync/keys.json")
+    }
+    
+    func getKey(mac: String, packageName: String) -> Data? {
+        guard let data = try? Data(contentsOf: storageURL),
+              let entries = try? JSONDecoder().decode([KeyEntry].self, from: data) else {
+            return nil
+        }
+        return entries.first { $0.mac == mac && $0.packageName == packageName }?.key
+    }
+    
+    func saveKey(mac: String, packageName: String, key: Data) {
+        var entries = getEntries()
+        entries.removeAll { $0.mac == mac && $0.packageName == packageName }
+        entries.append(KeyEntry(mac: mac, packageName: packageName, key: key))
+        
+        if let data = try? JSONEncoder().encode(entries) {
+            try? data.write(to: storageURL)
+        }
+    }
+    
+    private func getEntries() -> [KeyEntry] {
+        guard let data = try? Data(contentsOf: storageURL),
+              let entries = try? JSONDecoder().decode([KeyEntry].self, from: data) else {
+            return []
+        }
+        return entries
+    }
+}
+```
+
+- [ ] **Step 2: Commit**
 
 ```bash
-git add macos/BleNotificationMac/
-git commit -m "feat(macos): implement CBPeripheralManager and protocol"
+git add macos/BleNotificationMac/Storage
+git commit -m "feat(macos): add pairing and key storage"
 ```
 
 ---
 
-### Task 4.3: 实现通知服务
+## Task 16: macOS 端 - 菜单栏应用
 
 **Files:**
-- Create: `macos/BleNotificationMac/NotificationService.swift`
+- Create: `macos/BleNotificationMac/UI/MenuBarApp.swift`
+- Create: `macos/BleNotificationMac/UI/NotificationService.swift`
 
 **Interfaces:**
-- Consumes: BleFrame
-- Produces: UserNotifications
+- Consumes: `PeripheralManager`, `PairingStorage`, `KeyStorage`
+- Produces: `MenuBarApp` (SwiftUI App)
 
-- [ ] **Step 1: 实现通知服务**
+- [ ] **Step 1: Write implementation**
 
 ```swift
-// macos/BleNotificationMac/NotificationService.swift
-import Foundation
-import UserNotifications
+// macos/BleNotificationMac/UI/MenuBarApp.swift
+import SwiftUI
 
-class NotificationService: NSObject, UNUserNotificationCenterDelegate {
-    override init() {
-        super.init()
-        UNUserNotificationCenter.current().delegate = self
-        requestPermission()
-    }
-
-    func requestPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(
-            options: [.alert, .sound]
-        ) { granted, error in
-            if let error = error {
-                print("Notification permission error: \(error)")
+@main
+struct MenuBarApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
+    var body: some Scene {
+        MenuBarExtra("BLE Notification Sync", systemImage: "antenna.radiowaves.left.and.right") {
+            VStack {
+                Text("Status: Running")
+                Divider()
+                Button("Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
             }
         }
     }
+}
 
-    func showNotification(jsonPayload: String) {
-        guard let data = jsonPayload.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let title = json["title"] as? String else {
-            return
+class AppDelegate: NSObject, NSApplicationDelegate {
+    private let peripheralManager = PeripheralManager()
+    private let pairingStorage = PairingStorage()
+    private let notificationService: NotificationService!
+    
+    override init() {
+        notificationService = NotificationService(pairingStorage: pairingStorage)
+        super.init()
+    }
+    
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        peripheralManager.onDataReceived = { [weak self] data in
+            self?.handleIncomingData(data)
         }
+        peripheralManager.startAdvertising()
+    }
+    
+    private func handleIncomingData(_ data: Data) {
+        // Decode frame, decrypt, show notification
+        notificationService.handleNotification(data)
+    }
+}
+```
 
-        let body = json["body"] as? String ?? ""
+```swift
+// macos/BleNotificationMac/UI/NotificationService.swift
+import Foundation
+import UserNotifications
 
+class NotificationService {
+    private let pairingStorage: PairingStorage
+    
+    init(pairingStorage: PairingStorage) {
+        self.pairingStorage = pairingStorage
+        requestPermission()
+    }
+    
+    private func requestPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            print("Notification permission: \(granted)")
+        }
+    }
+    
+    func handleNotification(_ data: Data) {
+        // TODO: Decode frame, decrypt, show notification
+        // This is a placeholder
+        print("Received notification data: \(data.count) bytes")
+    }
+    
+    func showNotification(title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
-
+        
         let request = UNNotificationRequest(
             identifier: UUID().uuidString,
             content: content,
             trigger: nil
         )
-
+        
         UNUserNotificationCenter.current().add(request)
     }
-
-    func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification,
-        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-    ) {
-        completionHandler([.banner, .sound])
-    }
 }
 ```
 
-- [ ] **Step 2: 提交通知服务**
+- [ ] **Step 2: Commit**
 
 ```bash
-git add macos/BleNotificationMac/NotificationService.swift
-git commit -m "feat(macos): implement UserNotifications service"
-```
-
----
-
-### Task 4.4: 实现 ServerManager
-
-**Files:**
-- Create: `macos/BleNotificationMac/ServerManager.swift`
-
-**Interfaces:**
-- Consumes: PeripheralManager, NotificationService
-- Produces: 统一的服务器管理器
-
-- [ ] **Step 1: 实现 ServerManager**
-
-```swift
-// macos/BleNotificationMac/ServerManager.swift
-import Foundation
-
-class ServerManager: ObservableObject {
-    private let peripheralManager = PeripheralManager()
-    private let notificationService = NotificationService()
-
-    @Published var isRunning: Bool = false
-
-    init() {
-        peripheralManager.onDataReceived = { [weak self] data in
-            self?.handleData(data)
-        }
-        peripheralManager.start()
-    }
-
-    private func handleData(_ data: Data) {
-        guard let frame = BleFrame.parse(data) else { return }
-
-        switch frame.msgType {
-        case .notify:
-            if let json = String(data: frame.payload, encoding: .utf8) {
-                notificationService.showNotification(jsonPayload: json)
-            }
-        case .register:
-            // Handle registration
-            break
-        default:
-            break
-        }
-    }
-}
-```
-
-- [ ] **Step 2: 提交 ServerManager**
-
-```bash
-git add macos/BleNotificationMac/ServerManager.swift
-git commit -m "feat(macos): implement ServerManager to coordinate components"
-```
-
----
-
-## Phase 5: 联调测试与文档
-
-### Task 5.1: 编写 README
-
-**Files:**
-- Create: `README.md`
-
-**Interfaces:**
-- Consumes: 所有设计文档和代码
-- Produces: 项目说明文档
-
-- [ ] **Step 1: 编写 README**
-
-```markdown
-# BLE Notification Sync
-
-跨平台 BLE 闹钟通知同步开源项目。通过低功耗蓝牙将 Android 手机的闹钟通知推送到 Windows/macOS 电脑。
-
-## Features
-
-- 零云端、零账号、纯本地
-- 二维码快速配对
-- 支持 APP 图标传输
-- 系统原生通知
-
-## Supported Platforms
-
-| Platform | Role | Technology |
-|----------|------|------------|
-| Android | GATT Client | Kotlin SDK |
-| Windows | GATT Server | C# .NET 8 |
-| macOS | GATT Server | Swift |
-
-## Quick Start
-
-### Android
-
-```kotlin
-// Initialize SDK
-BleNotificationSDK.init(context)
-
-// Pair with PC
-sdk.startPairing(activity, callback)
-
-// Set reminder
-sdk.setReminder(
-    taskId = "task_123",
-    title = "Meeting",
-    body = "Product review at 10:00",
-    triggerAt = System.currentTimeMillis() + 3600000
-)
-```
-
-### Windows
-
-1. Build and run `BleNotificationWin.sln`
-2. App will appear in system tray
-3. Scan QR code from Android to pair
-
-### macOS
-
-1. Build and run `BleNotificationMac.xcodeproj`
-2. App will appear in menu bar
-3. Scan QR code from Android to pair
-
-## Protocol
-
-See [docs/protocol.md](docs/protocol.md) for detailed protocol specification.
-
-## License
-
-MIT
-```
-
-- [ ] **Step 2: 提交 README**
-
-```bash
-git add README.md
-git commit -m "docs: add project README"
-```
-
----
-
-### Task 5.2: 初始化 Git 仓库
-
-**Files:**
-- Create: `.gitignore`
-
-**Interfaces:**
-- Consumes: 项目文件
-- Produces: Git 仓库
-
-- [ ] **Step 1: 创建 .gitignore**
-
-```gitignore
-# Android
-*.iml
-.gradle
-/local.properties
-/.idea
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-android/build/
-android/sdk/build/
-
-# Windows
-[Bb]in/
-[Oo]bj/
-*.user
-*.suo
-.vs/
-
-# macOS
-*.xcodeproj/project.xcworkspace/
-*.xcodeproj/xcuserdata/
-*.xcuserstate
-DerivedData/
-build/
-
-# IDE
-.vscode/
-.idea/
-```
-
-- [ ] **Step 2: 初始化 Git**
-
-```bash
-cd /mnt/androiddev/MultiPlatformProjects/BleNotificationSync
-git init
-git add .
-git commit -m "feat: initial project structure with protocol spec, Android SDK, Windows and macOS apps"
+git add macos/BleNotificationMac/UI
+git commit -m "feat(macos): add menu bar app and notification service"
 ```
 
 ---
 
 ## Summary
 
-| Phase | Tasks | Deliverables |
-|-------|-------|--------------|
-| Phase 1 | 1 | docs/protocol.md |
-| Phase 2 | 4 | android/sdk/ (Kotlin AAR) |
-| Phase 3 | 4 | windows/BleNotificationWin/ (.NET) |
-| Phase 4 | 4 | macos/BleNotificationMac/ (Swift) |
-| Phase 5 | 2 | README.md, .gitignore, Git init |
+| Task | Description | Status |
+|------|-------------|--------|
+| 1 | 下载 LibTomCrypt 源码 | - |
+| 2 | Android JNI 桥接 | - |
+| 3 | Android 密钥派生 | - |
+| 4 | Android 加密服务 | - |
+| 5 | Android 帧编码器 | - |
+| 6 | Android 帧解码器 | - |
+| 7 | Android BLE 客户端 | - |
+| 8 | Android 扫码分层实现 | - |
+| 9 | Android 配对管理器 | - |
+| 10 | Android SDK 主入口 | - |
+| 11 | Windows LibTomCrypt 桥接 | - |
+| 12 | Windows GATT Server | - |
+| 13 | macOS LibTomCrypt 桥接 | - |
+| 14 | macOS Peripheral Manager | - |
+| 15 | macOS 配对存储 | - |
+| 16 | macOS 菜单栏应用 | - |
 
-**Total:** 15 tasks
+**Plan complete and saved to `docs/superpowers/plans/2026-07-10-ble-notification-sync.md`.**
+
+**Two execution options:**
+
+**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
+
+**2. Inline Execution** - Execute tasks in this session, batch execution with checkpoints
+
+Which approach?

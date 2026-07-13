@@ -36,6 +36,9 @@ public class MainForm : Form
     // Language support
     private static bool IsChinese => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "zh";
 
+    // Exit flag
+    private bool _isExiting;
+
     public MainForm()
     {
         InitializeComponents();
@@ -110,10 +113,13 @@ public class MainForm : Form
         // Minimize to tray instead of closing
         FormClosing += (s, e) =>
         {
-            e.Cancel = true;
-            Hide();
-            if (_trayIcon != null)
-                _trayIcon.Visible = true;
+            if (!_isExiting)
+            {
+                e.Cancel = true;
+                Hide();
+                if (_trayIcon != null)
+                    _trayIcon.Visible = true;
+            }
         };
     }
 
@@ -214,6 +220,7 @@ public class MainForm : Form
 
     private void QuitApplication()
     {
+        _isExiting = true;
         try { StopServer(); } catch { }
         try { _statusTimer?.Dispose(); } catch { }
         try { _notificationManager?.Dispose(); } catch { }

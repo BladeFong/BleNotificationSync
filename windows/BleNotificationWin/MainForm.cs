@@ -213,12 +213,12 @@ public class MainForm : Form
 
     private void QuitApplication()
     {
-        StopServer();
-        _statusTimer?.Dispose();
-        _notificationManager?.Dispose();
-        _gattServer?.Dispose();
-        _trayIcon.Visible = false;
-        _trayIcon.Dispose();
+        try { StopServer(); } catch { }
+        try { _statusTimer?.Dispose(); } catch { }
+        try { _notificationManager?.Dispose(); } catch { }
+        try { _gattServer?.Dispose(); } catch { }
+        try { _trayIcon.Visible = false; } catch { }
+        try { _trayIcon.Dispose(); } catch { }
         Application.Exit();
     }
 

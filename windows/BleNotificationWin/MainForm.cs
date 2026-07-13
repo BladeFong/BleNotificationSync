@@ -226,32 +226,34 @@ public class MainForm : Form
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.Clear(Color.Transparent);
 
-        // Bell body (blue)
+        // Bell body - wider, rounder shape
         using var bellBrush = new SolidBrush(Color.FromArgb(59, 130, 246));
         var bellPath = new System.Drawing.Drawing2D.GraphicsPath();
-        bellPath.AddArc(10, 4, 12, 12, 180, 180);  // top curve
-        bellPath.AddLine(10, 10, 10, 22);           // left side
-        bellPath.AddLine(10, 22, 22, 22);           // bottom
-        bellPath.AddLine(22, 22, 22, 10);           // right side
+        bellPath.AddArc(6, 2, 20, 16, 180, 180);   // top dome
+        bellPath.AddLine(6, 12, 6, 22);             // left side
+        bellPath.AddLine(6, 22, 26, 22);            // bottom
+        bellPath.AddLine(26, 22, 26, 12);           // right side
         bellPath.CloseFigure();
         g.FillPath(bellBrush, bellPath);
 
-        // Bell rim (darker blue)
+        // Bell rim (darker blue, rounded)
         using var rimBrush = new SolidBrush(Color.FromArgb(30, 64, 175));
-        g.FillRectangle(rimBrush, 7, 22, 18, 3);
+        g.FillRectangle(rimBrush, 4, 22, 24, 4);
 
-        // Clapper
+        // Clapper (bottom ball)
         using var clapperBrush = new SolidBrush(Color.FromArgb(30, 64, 175));
-        g.FillEllipse(clapperBrush, 13, 25, 6, 5);
+        g.FillEllipse(clapperBrush, 11, 26, 10, 5);
 
-        // BLE signal waves (light blue)
-        using var wavePen = new Pen(Color.FromArgb(147, 197, 253), 1.5f);
-        g.DrawArc(wavePen, 20, 2, 8, 8, 315, 90);
-        g.DrawArc(wavePen, 22, 0, 10, 10, 315, 90);
+        // BLE signal waves (right side, cleaner)
+        using var wavePen = new Pen(Color.FromArgb(147, 197, 253), 2f);
+        wavePen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+        wavePen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+        g.DrawArc(wavePen, 22, 4, 6, 6, 315, 90);
+        g.DrawArc(wavePen, 25, 2, 8, 8, 315, 90);
 
-        // Highlight
-        using var highlightBrush = new SolidBrush(Color.FromArgb(60, 255, 255, 255));
-        g.FillEllipse(highlightBrush, 12, 7, 4, 6);
+        // Highlight (subtle)
+        using var highlightBrush = new SolidBrush(Color.FromArgb(50, 255, 255, 255));
+        g.FillEllipse(highlightBrush, 10, 6, 6, 8);
 
         return Icon.FromHandle(bmp.GetHicon());
     }

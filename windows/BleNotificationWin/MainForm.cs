@@ -158,25 +158,10 @@ public class MainForm : Form
         quitItem.Click += (s, e) => QuitApplication();
         _trayMenu.Items.Add(quitItem);
 
-        // Load custom icon or fallback to system icon
-        Icon appIcon;
-        try
-        {
-            string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.png");
-            if (File.Exists(iconPath))
-                appIcon = new Icon(iconPath);
-            else
-                appIcon = SystemIcons.Application;
-        }
-        catch
-        {
-            appIcon = SystemIcons.Application;
-        }
-
         _trayIcon = new NotifyIcon
         {
             Text = IsChinese ? "BLE 通知同步" : "BLE Notification Sync",
-            Icon = appIcon,
+            Icon = SystemIcons.Information,
             ContextMenuStrip = _trayMenu,
             Visible = true
         };

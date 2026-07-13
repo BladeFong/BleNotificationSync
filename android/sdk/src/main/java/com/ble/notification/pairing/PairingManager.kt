@@ -1,5 +1,6 @@
 package com.ble.notification.pairing
 
+import android.content.Context
 import com.ble.notification.ble.BleClient
 import com.ble.notification.ble.ConnectionCallback
 import com.ble.notification.protocol.FrameEncoder
@@ -32,7 +33,7 @@ class PairingManager {
         val appName: String
     )
 
-    fun startPairing(qrResult: QrResult, callback: PairingCallback) {
+    fun startPairing(context: Context, qrResult: QrResult, callback: PairingCallback) {
         if (currentState != PairingState.IDLE) {
             callback.onError("Already in state: $currentState")
             return
@@ -41,7 +42,7 @@ class PairingManager {
         callback.onScanSuccess()
         transitionTo(PairingState.CONNECTING, callback)
 
-        BleClient.connect(qrResult.mac, object : ConnectionCallback {
+        BleClient.connect(context, qrResult.mac, object : ConnectionCallback {
             override fun onReady(gatt: android.bluetooth.BluetoothGatt) {
                 transitionTo(PairingState.REGISTERING, callback)
 

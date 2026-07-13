@@ -1,42 +1,21 @@
 plugins {
     id("com.android.library")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {
     namespace = "com.ble.notification.sdk"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 23
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
-
-        externalNativeBuild {
-            cmake {
-                // Pure C — no cppFlags needed
-                arguments += listOf(
-                    "-DANDROID_STL=c++_static",
-                )
-            }
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = "1.8"
     }
 
     buildTypes {
@@ -55,15 +34,15 @@ android {
 }
 
 dependencies {
-    // CameraX
-    val cameraxVersion = "1.4.1"
-    implementation("androidx.camera:camera-core:$cameraxVersion")
-    implementation("androidx.camera:camera-camera2:$cameraxVersion")
-    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
-    implementation("androidx.camera:camera-view:$cameraxVersion")
+    // CameraX (commented out until online build available)
+    // val cameraxVersion = "1.4.1"
+    // implementation("androidx.camera:camera-core:$cameraxVersion")
+    // implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    // implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    // implementation("androidx.camera:camera-view:$cameraxVersion")
 
-    // ML Kit barcode scanning
-    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    // ML Kit barcode scanning (commented out until online build available)
+    // implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // AndroidX core
     implementation("androidx.core:core-ktx:1.15.0")

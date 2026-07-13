@@ -45,7 +45,7 @@ object FrameDecoder {
             decodeNotifyPayload(data)
         } else {
             val raw = data.sliceArray(HEADER_SIZE until data.size)
-            raw.ifEmpty { null }
+            if (raw.isEmpty()) null else raw
         }
 
         return Frame(msgType, seq, totalSeq, payload)

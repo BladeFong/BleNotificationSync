@@ -1,6 +1,9 @@
 package com.ble.notification.ble
 
 import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothProfile
+import android.content.Context
 import android.net.Uri
 import com.ble.notification.qr.QrResult
 import java.util.UUID
@@ -37,7 +40,7 @@ object BleClient {
     }
 
     @Suppress("MissingPermission")
-    fun connect(mac: String, callback: ConnectionCallback) {
+    fun connect(context: Context, mac: String, callback: ConnectionCallback) {
         val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
         if (bluetoothAdapter == null) {
             callback.onError("Bluetooth not available")
@@ -56,14 +59,14 @@ object BleClient {
         }
 
         device.connectGatt(
-            android.bluetooth.BluetoothAdapter.getDefaultAdapter().applicationContext,
+            context,
             false,
-            object : android.bluetooth.BluetoothGattCallback() {
+            object : BluetoothGattCallback() {
 
                 override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-                    if (newState == android.bluetooth.BluetoothProfile.STATE_CONNECTED) {
+                    if (newState == BluetoothProfile.STATE_CONNECTED) {
                         gatt.discoverServices()
-                    } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
+                    } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                         callback.onError("Disconnected with status: $status")
                         gatt.close()
                     }

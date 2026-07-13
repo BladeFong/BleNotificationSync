@@ -1,6 +1,5 @@
 package com.ble.notification.sdk
 
-import android.app.Activity
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
@@ -8,6 +7,7 @@ import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import androidx.fragment.app.FragmentActivity
 import com.ble.notification.ble.BleClient
 import com.ble.notification.ble.ConnectionCallback
 import com.ble.notification.pairing.PairingCallback
@@ -42,13 +42,13 @@ class BleNotificationSDK private constructor(private val context: Context) {
         }
     }
 
-    fun startPairing(activity: Activity, callback: PairingCallback) {
+    fun startPairing(activity: FragmentActivity, callback: PairingCallback) {
         val fragment = QrScannerFragment.newInstance { qrResult ->
             if (qrResult == null) {
                 callback.onError("QR scan cancelled or failed")
                 return@newInstance
             }
-            pairingManager.startPairing(qrResult, object : PairingCallback {
+            pairingManager.startPairing(context, qrResult, object : PairingCallback {
                 override fun onScanSuccess() = callback.onScanSuccess()
                 override fun onConnecting() = callback.onConnecting()
                 override fun onRegistering() = callback.onRegistering()
@@ -82,7 +82,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 return
             }
 
-        BleClient.connect(mac, object : ConnectionCallback {
+        BleClient.connect(context, mac, object : ConnectionCallback {
             override fun onReady(gatt: BluetoothGatt) {
                 val frame = FrameEncoder.encodeNotify(
                     packageName = packageName,

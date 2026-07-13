@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Windows.Forms;
@@ -32,6 +33,9 @@ public class MainForm : Form
     private readonly Dictionary<string, MemoryStream> _iconBuffers = new();
     private readonly Dictionary<string, int> _iconExpectedFrames = new();
 
+    // Language support
+    private static bool IsChinese => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "zh";
+
     public MainForm()
     {
         InitializeComponents();
@@ -41,7 +45,7 @@ public class MainForm : Form
 
     private void InitializeComponents()
     {
-        Text = "BLE Notification Sync";
+        Text = IsChinese ? "BLE 通知同步" : "BLE Notification Sync";
         Size = new Size(500, 400);
         StartPosition = FormStartPosition.CenterScreen;
         ShowInTaskbar = false;
@@ -49,7 +53,7 @@ public class MainForm : Form
 
         var titleLabel = new Label
         {
-            Text = "BLE Notification Sync",
+            Text = IsChinese ? "BLE 通知同步" : "BLE Notification Sync",
             Font = new Font("Segoe UI", 16, FontStyle.Bold),
             AutoSize = true,
             Location = new Point(20, 15)
@@ -57,7 +61,7 @@ public class MainForm : Form
 
         _statusLabel = new Label
         {
-            Text = "Status: Initializing...",
+            Text = IsChinese ? "状态: 初始化中..." : "Status: Initializing...",
             Font = new Font("Segoe UI", 10),
             AutoSize = true,
             Location = new Point(20, 55)
@@ -65,7 +69,7 @@ public class MainForm : Form
 
         _connectionLabel = new Label
         {
-            Text = "Connections: 0",
+            Text = IsChinese ? "连接数: 0" : "Connections: 0",
             Font = new Font("Segoe UI", 10),
             AutoSize = true,
             Location = new Point(20, 80)
@@ -73,7 +77,7 @@ public class MainForm : Form
 
         _startButton = new Button
         {
-            Text = "Start Server",
+            Text = IsChinese ? "启动服务" : "Start",
             Size = new Size(120, 35),
             Location = new Point(20, 115),
             Enabled = true
@@ -82,7 +86,7 @@ public class MainForm : Form
 
         _stopButton = new Button
         {
-            Text = "Stop Server",
+            Text = IsChinese ? "停止服务" : "Stop",
             Size = new Size(120, 35),
             Location = new Point(150, 115),
             Enabled = false
@@ -115,19 +119,41 @@ public class MainForm : Form
     private void InitializeTray()
     {
         _trayMenu = new ContextMenuStrip();
-        _trayMenu.Items.Add("Show", null, (s, e) => ShowMainWindow());
+
+        // Main menu items - language based
+        var showItem = new ToolStripMenuItem(IsChinese ? "显示窗口" : "Show");
+        showItem.Click += (s, e) => ShowMainWindow();
+        _trayMenu.Items.Add(showItem);
+
         _trayMenu.Items.Add(new ToolStripSeparator());
-        _trayMenu.Items.Add("Start Server", null, (s, e) => StartServer());
-        _trayMenu.Items.Add("Stop Server", null, (s, e) => StopServer());
+
+        var startItem = new ToolStripMenuItem(IsChinese ? "启动服务" : "Start Server");
+        startItem.Click += (s, e) => StartServer();
+        _trayMenu.Items.Add(startItem);
+
+        var stopItem = new ToolStripMenuItem(IsChinese ? "停止服务" : "Stop Server");
+        stopItem.Click += (s, e) => StopServer();
+        _trayMenu.Items.Add(stopItem);
+
         _trayMenu.Items.Add(new ToolStripSeparator());
-        _trayMenu.Items.Add("Status", null, (s, e) => ShowStatus());
-        _trayMenu.Items.Add("Paired Devices", null, (s, e) => ShowPairedDevices());
+
+        var statusItem = new ToolStripMenuItem(IsChinese ? "状态" : "Status");
+        statusItem.Click += (s, e) => ShowStatus();
+        _trayMenu.Items.Add(statusItem);
+
+        var pairedItem = new ToolStripMenuItem(IsChinese ? "已配对设备" : "Paired Devices");
+        pairedItem.Click += (s, e) => ShowPairedDevices();
+        _trayMenu.Items.Add(pairedItem);
+
         _trayMenu.Items.Add(new ToolStripSeparator());
-        _trayMenu.Items.Add("Quit", null, (s, e) => QuitApplication());
+
+        var quitItem = new ToolStripMenuItem(IsChinese ? "退出" : "Quit");
+        quitItem.Click += (s, e) => QuitApplication();
+        _trayMenu.Items.Add(quitItem);
 
         _trayIcon = new NotifyIcon
         {
-            Text = "BLE Notification Sync",
+            Text = IsChinese ? "BLE 通知同步" : "BLE Notification Sync",
             Icon = SystemIcons.Application,
             ContextMenuStrip = _trayMenu,
             Visible = true

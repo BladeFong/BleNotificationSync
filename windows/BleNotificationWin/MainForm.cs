@@ -112,7 +112,8 @@ public class MainForm : Form
         {
             e.Cancel = true;
             Hide();
-            _trayIcon.Visible = true;
+            if (_trayIcon != null)
+                _trayIcon.Visible = true;
         };
     }
 

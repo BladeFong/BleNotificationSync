@@ -186,7 +186,7 @@ public class MainForm : Form
         UpdateStatus("Starting GATT server...");
         _startButton.Enabled = false;
 
-        bool started = await _gattServer.Start();
+        bool started = await _gattServer.StartAsync();
         if (started)
         {
             UpdateStatus("Server running - advertising");

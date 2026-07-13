@@ -64,7 +64,7 @@ public static class LibTomCrypt
         byte[] tag = new byte[TAG_LENGTH];
         ulong tagLen = TAG_LENGTH;
 
-        int result = CcmMemory(
+        int result = ccm_memory(
             cipherIdx,
             key, (ulong)key.Length,
             IntPtr.Zero, // no pre-scheduled key
@@ -107,7 +107,7 @@ public static class LibTomCrypt
         // Extract tag from ciphertext
         Array.Copy(ciphertext, ptLength, tag, 0, TAG_LENGTH);
 
-        int result = CcmMemory(
+        int result = ccm_memory(
             cipherIdx,
             key, (ulong)key.Length,
             IntPtr.Zero,
@@ -139,23 +139,23 @@ public static class LibTomCrypt
         if (length <= 0 || length > 255) return null;
 
         // Step 1: Extract — PRK = HMAC(salt, IKM)
-        int hashSize = 32; // SHA-256 = 32 bytes
+        ulong hashSize = 32; // SHA-256 = 32 bytes
         byte[] prk = new byte[hashSize];
         byte[] output = new byte[length];
 
         // IKM = info (package name); salt may be empty for default
         byte[]? saltToUse = salt.Length > 0 ? salt : null;
 
-        int result = HkdfExtract(
+        int result = hkdf_extract(
             hashIdx,
             saltToUse, saltToUse != null ? (ulong)saltToUse.Length : 0,
             info, (ulong)info.Length,
-            prk, ref (ulong)hashSize);
+            prk, ref hashSize);
 
         if (result != CRYPT_OK) return null;
 
         // Step 2: Expand — OKM = Expand(PRK, info, L)
-        result = HkdfExpand(
+        result = hkdf_expand(
             hashIdx,
             info, (ulong)info.Length,
             prk, (ulong)hashSize,

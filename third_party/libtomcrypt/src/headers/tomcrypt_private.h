@@ -19,7 +19,7 @@
 #if defined(ENDIAN_64BITWORD) && !defined(ENDIAN_64BITWORD_ILP32)
    #define CONSTPTR(n) CONST64(n)
 #else
-   #define CONSTPTR(n) n ## uL
+   #define CONSTPTR(n) n ## ULL
 #endif
 
 LTC_STATIC_ASSERT(correct_CONSTPTR_size, sizeof(CONSTPTR(1)) == sizeof(void*))

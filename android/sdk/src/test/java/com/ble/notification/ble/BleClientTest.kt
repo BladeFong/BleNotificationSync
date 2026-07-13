@@ -1,5 +1,6 @@
 package com.ble.notification.ble
 
+import com.ble.notification.qr.QrResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test

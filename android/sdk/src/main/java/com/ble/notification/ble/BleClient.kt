@@ -2,9 +2,8 @@ package com.ble.notification.ble
 
 import android.bluetooth.BluetoothGatt
 import android.net.Uri
+import com.ble.notification.qr.QrResult
 import java.util.UUID
-
-data class QrResult(val mac: String, val uuid: String)
 
 interface ConnectionCallback {
     fun onReady(gatt: BluetoothGatt)

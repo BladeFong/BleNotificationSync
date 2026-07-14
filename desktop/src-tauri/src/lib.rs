@@ -47,17 +47,17 @@ pub fn run() {
             // Check settings
             let silent_enabled = storage::get_silent_mode().unwrap_or(false);
             let autostart_enabled = storage::get_autostart().unwrap_or(false);
+            let ble_running = false; // Default to false, will be synced when window shows
 
             // Create menu items
             let show_item = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
-            let start_item = MenuItem::with_id(app, "start", "启动服务", true, None::<&str>)?;
-            let stop_item = MenuItem::with_id(app, "stop", "停止服务", true, None::<&str>)?;
+            let ble_service_item = CheckMenuItem::with_id(app, "ble_service", "启动服务", true, ble_running, None::<&str>)?;
             let auto_start_item = CheckMenuItem::with_id(app, "autostart", "开机自启动", true, autostart_enabled, None::<&str>)?;
             let silent_item = CheckMenuItem::with_id(app, "silent", "静默启动服务", true, silent_enabled, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 
             let menu = Menu::with_items(app, &[
-                &show_item, &start_item, &stop_item,
+                &show_item, &ble_service_item,
                 &auto_start_item, &silent_item,
                 &quit_item,
             ])?;
@@ -82,11 +82,19 @@ pub fn run() {
                                 let _ = app_handle.emit("ble-status-sync", is_running);
                             }
                         }
-                        "start" => {
-                            let _ = app_handle.emit("tray-action", "start");
-                        }
-                        "stop" => {
-                            let _ = app_handle.emit("tray-action", "stop");
+                        "ble_service" => {
+                            // Toggle BLE service
+                            let state = app_handle.state::<ble::BleState>();
+                            let mut is_running = state.is_running.lock().unwrap();
+                            if *is_running {
+                                // Stop
+                                *is_running = false;
+                                let _ = app_handle.emit("ble-status-sync", false);
+                            } else {
+                                // Start
+                                *is_running = true;
+                                let _ = app_handle.emit("ble-status-sync", true);
+                            }
                         }
                         "autostart" => {
                             let current = storage::get_autostart().unwrap_or(false);

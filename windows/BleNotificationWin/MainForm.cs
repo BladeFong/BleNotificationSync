@@ -254,7 +254,9 @@ public class MainForm : Form
         {
             try
             {
-                return new Icon(iconPath);
+                using var bitmap = new Bitmap(iconPath);
+                var hIcon = bitmap.GetHicon();
+                return Icon.FromHandle(hIcon);
             }
             catch { }
         }

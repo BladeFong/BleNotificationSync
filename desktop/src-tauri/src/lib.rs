@@ -108,10 +108,18 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // If silent mode is enabled, hide window on startup
+            // If silent mode is enabled, hide window and start BLE service
             if silent_enabled {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.hide();
+                }
+                // Auto-start BLE service in silent mode
+                let _ = app.emit("tray-action", "start");
+            } else {
+                // Normal mode: show window
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
                 }
             }
 

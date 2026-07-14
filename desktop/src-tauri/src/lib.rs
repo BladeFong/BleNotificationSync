@@ -81,11 +81,16 @@ pub fn run() {
                             let _ = app_handle.emit("tray-action", "autostart-toggled");
                         }
                         "silent" => {
-                            // Hide window and start server
+                            // Toggle window visibility (silent mode)
                             if let Some(window) = app_handle.get_webview_window("main") {
-                                let _ = window.hide();
+                                if window.is_visible().unwrap_or(false) {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.show();
+                                    let _ = window.unminimize();
+                                    let _ = window.set_focus();
+                                }
                             }
-                            let _ = app_handle.emit("tray-action", "silent-start");
                         }
                         "quit" => {
                             std::process::exit(0);

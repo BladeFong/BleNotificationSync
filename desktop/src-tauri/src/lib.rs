@@ -76,6 +76,10 @@ pub fn run() {
                                 let _ = window.show();
                                 let _ = window.unminimize();
                                 let _ = window.set_focus();
+                                // Sync BLE state to frontend
+                                let state = app_handle.state::<ble::BleState>();
+                                let is_running = *state.is_running.lock().unwrap();
+                                let _ = app_handle.emit("ble-status-sync", is_running);
                             }
                         }
                         "start" => {

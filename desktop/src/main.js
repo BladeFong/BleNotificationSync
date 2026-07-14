@@ -139,6 +139,15 @@ listen('tray-action', async (event) => {
     }
 });
 
+// Listen for BLE status sync (when window shows)
+listen('ble-status-sync', (event) => {
+    isRunning = event.payload;
+    updateUI();
+    if (isRunning) {
+        addLog(isChinese ? 'GATT 服务已启动' : 'GATT server started');
+    }
+});
+
 // Listen for show window event from tray
 listen('tray-show-window', async () => {
     const window = getCurrentWindow();

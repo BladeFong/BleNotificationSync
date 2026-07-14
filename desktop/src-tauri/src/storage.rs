@@ -133,3 +133,57 @@ pub fn get_autostart() -> Result<bool, String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     Ok(stdout.contains(app_name))
 }
+
+// Silent mode settings (stored in Windows registry)
+#[tauri::command]
+pub fn set_silent_mode(enabled: bool) -> Result<String, String> {
+    let app_name = "BLE Notification Sync_Silent";
+
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    if enabled {
+        std::process::Command::new("reg")
+            .args(&[
+                "add",
+                r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+                "/v", app_name, "/t", "REG_SZ", "/d", "1", "/f",
+            ])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    } else {
+        std::process::Command::new("reg")
+            .args(&[
+                "delete",
+                r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+                "/v", app_name, "/f",
+            ])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(if enabled { "Silent mode enabled" } else { "Silent mode disabled" }.to_string())
+}
+
+#[tauri::command]
+pub fn get_silent_mode() -> Result<bool, String> {
+    let app_name = "BLE Notification Sync_Silent";
+
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let output = std::process::Command::new("reg")
+        .args(&[
+            "query",
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+            "/v", app_name,
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.contains(app_name))
+}

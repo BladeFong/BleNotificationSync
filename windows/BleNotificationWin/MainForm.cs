@@ -246,9 +246,9 @@ public class MainForm : Form
 
     private static Icon CreateBellIcon()
     {
-        // Try to load icon from icons directory
+        // Try to load ICO file from icons directory (preferred)
         string basePath = AppDomain.CurrentDomain.BaseDirectory;
-        string[] iconFiles = { "icons/icon_32.png", "icons/icon_64.png", "icon.png" };
+        string[] iconFiles = { "icons/icon_64.ico", "icons/icon_32.ico", "icons/icon_64.png", "icons/icon_32.png", "icon.png" };
 
         foreach (var file in iconFiles)
         {
@@ -257,9 +257,13 @@ public class MainForm : Form
             {
                 try
                 {
-                    using var bitmap = new Bitmap(iconPath);
-                    var hIcon = bitmap.GetHicon();
-                    return Icon.FromHandle(hIcon);
+                    if (iconPath.EndsWith(".ico", StringComparison.OrdinalIgnoreCase))
+                        return new Icon(iconPath);
+                    else
+                    {
+                        using var bitmap = new Bitmap(iconPath);
+                        return Icon.FromHandle(bitmap.GetHicon());
+                    }
                 }
                 catch { }
             }

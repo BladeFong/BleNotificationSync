@@ -26,7 +26,8 @@ public class MainForm : Form
     private Label _connectionLabel = null!;
     private Button _startButton = null!;
     private Button _stopButton = null!;
-    private ListBox _logList = null!;
+    private Button _pairButton = null!;
+    private TextBox _logBox = null!;
 
     // Timer for periodic status refresh
     private System.Windows.Forms.Timer _statusTimer = null!;
@@ -131,8 +132,18 @@ public class MainForm : Form
         };
         _stopButton.Click += (s, e) => StopServer();
 
+        _pairButton = new Button
+        {
+            Text = IsChinese ? "扫码绑定" : "Pair Device",
+            Size = new Size(120, 35),
+            Location = new Point(270, 5),
+            Enabled = true
+        };
+        _pairButton.Click += (s, e) => ShowPairDialog();
+
         buttonPanel.Controls.Add(_startButton);
         buttonPanel.Controls.Add(_stopButton);
+        buttonPanel.Controls.Add(_pairButton);
 
         // Log panel with header
         var logPanel = new Panel
@@ -150,14 +161,17 @@ public class MainForm : Form
             Height = 25
         };
 
-        _logList = new ListBox
+        _logBox = new TextBox
         {
             Dock = DockStyle.Fill,
             Font = new Font("Consolas", 9),
-            SelectionMode = SelectionMode.MultiExtended
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            WordWrap = false
         };
 
-        logPanel.Controls.Add(_logList);
+        logPanel.Controls.Add(_logBox);
         logPanel.Controls.Add(logHeader);
 
         // Add controls in reverse order (Dock fills from bottom)
@@ -422,6 +436,60 @@ public class MainForm : Form
             MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
+    private void ShowPairDialog()
+    {
+        var form = new Form
+        {
+            Text = IsChinese ? "扫码绑定设备" : "Pair Device",
+            Size = new Size(350, 200),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+
+        var label = new Label
+        {
+            Text = IsChinese
+                ? "请使用手机扫描以下二维码绑定：\n\n请在手机 APP 中点击「扫码配对」"
+                : "Scan QR code with your phone to pair:\n\nClick 'Scan Pair' in your phone app",
+            AutoSize = true,
+            Location = new Point(20, 20),
+            MaximumSize = new Size(300, 100)
+        };
+
+        var macLabel = new Label
+        {
+            Text = IsChinese ? "本机 MAC: 正在获取..." : "Local MAC: Getting...",
+            AutoSize = true,
+            Location = new Point(20, 120),
+            Font = new Font("Consolas", 9)
+        };
+
+        // Get local MAC address
+        var adapter = Windows.Devices.Bluetooth.BluetoothAdapter.GetDefaultAsync().AsTask().Result;
+        if (adapter != null)
+        {
+            macLabel.Text = IsChinese
+                ? $"本机 MAC: {adapter.BluetoothAddress.ToString("X12").Insert(2, ":").Insert(5, ":").Insert(8, ":").Insert(11, ":").Insert(14, ":")}"
+                : $"Local MAC: {adapter.BluetoothAddress.ToString("X12").Insert(2, ":").Insert(5, ":").Insert(8, ":").Insert(11, ":").Insert(14, ":")}";
+        }
+
+        var okButton = new Button
+        {
+            Text = IsChinese ? "确定" : "OK",
+            DialogResult = DialogResult.OK,
+            Location = new Point(240, 140)
+        };
+
+        form.Controls.Add(label);
+        form.Controls.Add(macLabel);
+        form.Controls.Add(okButton);
+        form.AcceptButton = okButton;
+
+        form.ShowDialog(this);
+    }
+
     #region GATT Data Handling
 
     private void OnGattDataReceived(object? sender, byte[] data)
@@ -617,15 +685,11 @@ public class MainForm : Form
         }
 
         string timestamp = DateTime.Now.ToString("HH:mm:ss");
-        _logList.Items.Add($"[{timestamp}] {message}");
+        string line = $"[{timestamp}] {message}";
 
-        // Keep only last 100 entries
-        while (_logList.Items.Count > 100)
-        {
-            _logList.Items.RemoveAt(0);
-        }
-
-        _logList.TopIndex = _logList.Items.Count - 1;
+        _logBox.AppendText(line + Environment.NewLine);
+        _logBox.SelectionStart = _logBox.TextLength;
+        _logBox.ScrollToCaret();
     }
 
     private void RefreshStatus()

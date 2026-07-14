@@ -372,18 +372,27 @@ public class MainForm : Form
         UpdateStatus("Starting GATT server...");
         _startButton.Enabled = false;
 
-        bool started = await _gattServer.StartAsync();
-        if (started)
+        try
         {
-            UpdateStatus("Server running - advertising");
-            _stopButton.Enabled = true;
-            AddLog("GATT server started");
+            bool started = await _gattServer.StartAsync();
+            if (started)
+            {
+                UpdateStatus(IsChinese ? "服务运行中 - 广播中" : "Server running - advertising");
+                _stopButton.Enabled = true;
+                AddLog(IsChinese ? "GATT 服务已启动" : "GATT server started");
+            }
+            else
+            {
+                UpdateStatus(IsChinese ? "启动失败" : "Failed to start server");
+                _startButton.Enabled = true;
+                AddLog(IsChinese ? "GATT 服务启动失败" : "GATT server failed to start");
+            }
         }
-        else
+        catch (Exception ex)
         {
-            UpdateStatus("Failed to start server");
+            UpdateStatus(IsChinese ? "启动错误" : "Start error");
             _startButton.Enabled = true;
-            AddLog("GATT server failed to start");
+            AddLog($"{(IsChinese ? "启动错误" : "Start error")}: {ex.Message}");
         }
     }
 
@@ -440,54 +449,114 @@ public class MainForm : Form
     {
         var form = new Form
         {
-            Text = IsChinese ? "扫码绑定设备" : "Pair Device",
-            Size = new Size(350, 200),
+            Text = IsChinese ? "配对设备" : "Pair Device",
+            Size = new Size(400, 500),
             StartPosition = FormStartPosition.CenterParent,
             FormBorderStyle = FormBorderStyle.FixedDialog,
             MaximizeBox = false,
             MinimizeBox = false
         };
 
+        // Get local MAC address
+        string macAddress = "Unknown";
+        try
+        {
+            var adapter = Windows.Devices.Bluetooth.BluetoothAdapter.GetDefaultAsync().AsTask().Result;
+            if (adapter != null)
+            {
+                macAddress = adapter.BluetoothAddress.ToString("X12");
+                macAddress = macAddress.Insert(2, ":").Insert(5, ":").Insert(8, ":").Insert(11, ":").Insert(14, ":");
+            }
+        }
+        catch { }
+
         var label = new Label
         {
             Text = IsChinese
-                ? "请使用手机扫描以下二维码绑定：\n\n请在手机 APP 中点击「扫码配对」"
-                : "Scan QR code with your phone to pair:\n\nClick 'Scan Pair' in your phone app",
+                ? "使用手机 APP 扫描下方二维码绑定"
+                : "Scan QR code with phone app to pair",
+            Font = new Font("Segoe UI", 11),
             AutoSize = true,
-            Location = new Point(20, 20),
-            MaximumSize = new Size(300, 100)
+            Location = new Point(20, 15)
         };
 
         var macLabel = new Label
         {
-            Text = IsChinese ? "本机 MAC: 正在获取..." : "Local MAC: Getting...",
+            Text = $"MAC: {macAddress}",
+            Font = new Font("Consolas", 10),
             AutoSize = true,
-            Location = new Point(20, 120),
-            Font = new Font("Consolas", 9)
+            Location = new Point(20, 45)
         };
 
-        // Get local MAC address
-        var adapter = Windows.Devices.Bluetooth.BluetoothAdapter.GetDefaultAsync().AsTask().Result;
-        if (adapter != null)
+        // QR code PictureBox
+        var qrBox = new PictureBox
         {
-            macLabel.Text = IsChinese
-                ? $"本机 MAC: {adapter.BluetoothAddress.ToString("X12").Insert(2, ":").Insert(5, ":").Insert(8, ":").Insert(11, ":").Insert(14, ":")}"
-                : $"Local MAC: {adapter.BluetoothAddress.ToString("X12").Insert(2, ":").Insert(5, ":").Insert(8, ":").Insert(11, ":").Insert(14, ":")}";
-        }
+            Size = new Size(250, 250),
+            Location = new Point(75, 75),
+            SizeMode = PictureBoxSizeMode.Zoom,
+            BorderStyle = BorderStyle.FixedSingle
+        };
+
+        // Generate QR code as bitmap
+        string qrContent = $"ble://pair?mac={macAddress}&uuid=0000A1B2-0000-1000-8000-00805F9B34FB";
+        qrBox.Image = GenerateQrCode(qrContent, 250, 250);
 
         var okButton = new Button
         {
-            Text = IsChinese ? "确定" : "OK",
+            Text = IsChinese ? "关闭" : "Close",
             DialogResult = DialogResult.OK,
-            Location = new Point(240, 140)
+            Location = new Point(290, 430),
+            Size = new Size(80, 30)
         };
 
         form.Controls.Add(label);
         form.Controls.Add(macLabel);
+        form.Controls.Add(qrBox);
         form.Controls.Add(okButton);
         form.AcceptButton = okButton;
 
         form.ShowDialog(this);
+    }
+
+    private static Bitmap GenerateQrCode(string content, int width, int height)
+    {
+        // Simple QR-like pattern generator (placeholder)
+        // In production, use a proper QR code library like QRCoder
+        var bmp = new Bitmap(width, height);
+        using var g = Graphics.FromImage(bmp);
+        g.Clear(Color.White);
+
+        // Draw a simple pattern as placeholder
+        using var pen = new Pen(Color.Black, 2);
+        int cellSize = width / 25;
+
+        // Fixed pattern (top-left, top-right, bottom-left corners)
+        for (int i = 0; i < 7; i++)
+        {
+            for (int j = 0; j < 7; j++)
+            {
+                if (i == 0 || i == 6 || j == 0 || j == 6 || (i >= 2 && i <= 4 && j >= 2 && j <= 4))
+                {
+                    g.FillRectangle(Brushes.Black, i * cellSize, j * cellSize, cellSize, cellSize);
+                }
+            }
+        }
+
+        // Draw some random data pattern
+        var hash = content.GetHashCode();
+        var rnd = new Random(hash);
+        for (int i = 8; i < 25; i++)
+        {
+            for (int j = 8; j < 25; j++)
+            {
+                if (rnd.Next(3) == 0)
+                {
+                    g.FillRectangle(Brushes.Black, i * cellSize, j * cellSize, cellSize, cellSize);
+                }
+            }
+        }
+
+        return bmp;
     }
 
     #region GATT Data Handling

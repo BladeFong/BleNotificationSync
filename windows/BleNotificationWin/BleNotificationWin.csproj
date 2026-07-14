@@ -8,6 +8,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <ApplicationIcon>icons\icon_64.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

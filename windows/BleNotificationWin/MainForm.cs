@@ -1,12 +1,14 @@
 using System;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Windows.Forms;
 using BleNotificationWin.Gatt;
 using BleNotificationWin.Notification;
 using BleNotificationWin.Storage;
+using Microsoft.Win32;
 
 namespace BleNotificationWin;
 
@@ -39,11 +41,21 @@ public class MainForm : Form
     // Exit flag
     private bool _isExiting;
 
-    public MainForm()
+    // Auto-start setting
+    private const string AutoStartRegPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string AppName = "BleNotificationSync";
+
+    public MainForm(bool showWindow = true)
     {
         InitializeComponents();
         InitializeTray();
         InitializeServices();
+
+        if (!showWindow)
+        {
+            WindowState = FormWindowState.Minimized;
+            Hide();
+        }
     }
 
     private void InitializeComponents()
@@ -159,6 +171,19 @@ public class MainForm : Form
         quitItem.Click += (s, e) => QuitApplication();
         _trayMenu.Items.Add(quitItem);
 
+        // Auto-start menu item
+        _trayMenu.Items.Add(new ToolStripSeparator());
+        var autoStartItem = new ToolStripMenuItem(IsChinese ? "开机自启动" : "Auto Start")
+        {
+            Checked = IsAutoStartEnabled()
+        };
+        autoStartItem.Click += (s, e) =>
+        {
+            ToggleAutoStart();
+            autoStartItem.Checked = IsAutoStartEnabled();
+        };
+        _trayMenu.Items.Add(autoStartItem);
+
         // Create blue bell icon dynamically
         var bellIcon = CreateBellIcon();
 
@@ -226,36 +251,66 @@ public class MainForm : Form
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.Clear(Color.Transparent);
 
-        // Bell body - wider, rounder shape
-        using var bellBrush = new SolidBrush(Color.FromArgb(59, 130, 246));
-        var bellPath = new System.Drawing.Drawing2D.GraphicsPath();
-        bellPath.AddArc(6, 2, 20, 16, 180, 180);   // top dome
-        bellPath.AddLine(6, 12, 6, 22);             // left side
-        bellPath.AddLine(6, 22, 26, 22);            // bottom
-        bellPath.AddLine(26, 22, 26, 12);           // right side
-        bellPath.CloseFigure();
-        g.FillPath(bellBrush, bellPath);
+        // Blue notification bubble with tail (matching user's SVG design)
+        using var bubbleBrush = new SolidBrush(Color.FromArgb(37, 99, 235));  // #2563EB
+        var bubblePath = new System.Drawing.Drawing2D.GraphicsPath();
+        bubblePath.AddArc(4, 2, 24, 20, 180, 180);  // top
+        bubblePath.AddArc(4, 14, 24, 16, 0, 90);    // bottom-left
+        bubblePath.AddLine(4, 30, 8, 34);            // tail
+        bubblePath.AddLine(8, 34, 10, 30);           // tail
+        bubblePath.AddArc(4, 14, 24, 16, 90, 90);    // bottom-right
+        bubblePath.CloseFigure();
+        g.FillPath(bubbleBrush, bubblePath);
 
-        // Bell rim (darker blue, rounded)
-        using var rimBrush = new SolidBrush(Color.FromArgb(30, 64, 175));
-        g.FillRectangle(rimBrush, 4, 22, 24, 4);
+        // White Bluetooth symbol inside
+        using var btPen = new Pen(Color.White, 2f);
+        btPen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+        btPen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+        btPen.LineJoin = System.Drawing.Drawing2D.LineJoin.Round;
 
-        // Clapper (bottom ball)
-        using var clapperBrush = new SolidBrush(Color.FromArgb(30, 64, 175));
-        g.FillEllipse(clapperBrush, 11, 26, 10, 5);
-
-        // BLE signal waves (right side, cleaner)
-        using var wavePen = new Pen(Color.FromArgb(147, 197, 253), 2f);
-        wavePen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
-        wavePen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
-        g.DrawArc(wavePen, 22, 4, 6, 6, 315, 90);
-        g.DrawArc(wavePen, 25, 2, 8, 8, 315, 90);
-
-        // Highlight (subtle)
-        using var highlightBrush = new SolidBrush(Color.FromArgb(50, 255, 255, 255));
-        g.FillEllipse(highlightBrush, 10, 6, 6, 8);
+        // Bluetooth: vertical line + two diagonal lines
+        g.DrawLine(btPen, 16, 8, 16, 24);    // center vertical
+        g.DrawLine(btPen, 16, 12, 11, 16);   // top-left diagonal
+        g.DrawLine(btPen, 16, 20, 11, 24);   // bottom-left diagonal
 
         return Icon.FromHandle(bmp.GetHicon());
+    }
+
+    private static bool IsAutoStartEnabled()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(AutoStartRegPath, false);
+            return key?.GetValue(AppName) != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void ToggleAutoStart()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(AutoStartRegPath, true);
+            if (key == null) return;
+
+            if (IsAutoStartEnabled())
+            {
+                key.DeleteValue(AppName, false);
+            }
+            else
+            {
+                string exePath = Environment.ProcessPath ?? "";
+                key.SetValue(AppName, $"\"{exePath}\" --autostart");
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to update auto-start: {ex.Message}", "Error",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private async void StartServer()

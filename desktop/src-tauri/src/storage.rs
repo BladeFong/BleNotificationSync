@@ -79,8 +79,11 @@ pub fn remove_paired_device(
 pub fn set_autostart(enabled: bool) -> Result<String, String> {
     let app_name = "BLE Notification Sync";
 
+    // Use non-blocking command
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
     if enabled {
-        // Add to Windows startup registry
         let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
         let cmd = format!("\"{}\"", exe_path.display());
 
@@ -88,29 +91,22 @@ pub fn set_autostart(enabled: bool) -> Result<String, String> {
             .args(&[
                 "add",
                 r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
-                "/v",
-                app_name,
-                "/t",
-                "REG_SZ",
-                "/d",
-                &cmd,
-                "/f",
+                "/v", app_name, "/t", "REG_SZ", "/d", &cmd, "/f",
             ])
-            .output()
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
             .map_err(|e| e.to_string())?;
 
         Ok("Autostart enabled".to_string())
     } else {
-        // Remove from Windows startup registry
         std::process::Command::new("reg")
             .args(&[
                 "delete",
                 r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
-                "/v",
-                app_name,
-                "/f",
+                "/v", app_name, "/f",
             ])
-            .output()
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
             .map_err(|e| e.to_string())?;
 
         Ok("Autostart disabled".to_string())
@@ -121,13 +117,16 @@ pub fn set_autostart(enabled: bool) -> Result<String, String> {
 pub fn get_autostart() -> Result<bool, String> {
     let app_name = "BLE Notification Sync";
 
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
     let output = std::process::Command::new("reg")
         .args(&[
             "query",
             r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
-            "/v",
-            app_name,
+            "/v", app_name,
         ])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|e| e.to_string())?;
 

@@ -12,6 +12,14 @@ use tauri::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // If app is already running, show the window
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .manage(ble::BleState::default())
         .manage(storage::StorageState::default())
@@ -113,8 +121,12 @@ pub fn run() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.hide();
                 }
-                // Auto-start BLE service in silent mode
-                let _ = app.emit("tray-action", "start");
+                // Directly start BLE service (not via event, since window may be hidden)
+                let state = app.state::<ble::BleState>();
+                let mut is_running = state.is_running.lock().unwrap();
+                if !*is_running {
+                    *is_running = true;
+                }
             } else {
                 // Normal mode: show window
                 if let Some(window) = app.get_webview_window("main") {

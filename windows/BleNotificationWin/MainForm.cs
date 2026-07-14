@@ -248,64 +248,19 @@ public class MainForm : Form
 
     private static Icon CreateBellIcon()
     {
-        var bmp = new Bitmap(32, 32);
-        using var g = Graphics.FromImage(bmp);
-        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        g.Clear(Color.Transparent);
+        // Try to load icon.png from application directory
+        string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.png");
+        if (File.Exists(iconPath))
+        {
+            try
+            {
+                return new Icon(iconPath);
+            }
+            catch { }
+        }
 
-        // Scale: SVG 200x140 -> 32x32
-        // X scale: 32/200 = 0.16
-        // Y scale: 32/140 = 0.2286
-
-        float sx = 32f / 200f;
-        float sy = 32f / 140f;
-
-        // Blue bubble (exact SVG path)
-        using var brush = new SolidBrush(Color.FromArgb(37, 99, 235));  // #2563EB
-        var path = new System.Drawing.Drawing2D.GraphicsPath();
-
-        // M30 20 H170
-        path.AddLine(30 * sx, 20 * sy, 170 * sx, 20 * sy);
-        // A20 20 0 0 1 190 40
-        path.AddArc(170 * sx, 20 * sy, 40 * sx, 40 * sy, 270, 90);
-        // V100
-        path.AddLine(190 * sx, 40 * sy, 190 * sx, 100 * sy);
-        // A20 20 0 0 1 170 120
-        path.AddArc(170 * sx, 100 * sy, 40 * sx, 40 * sy, 0, 90);
-        // H50
-        path.AddLine(170 * sx, 120 * sy, 50 * sx, 120 * sy);
-        // L30 135
-        path.AddLine(50 * sx, 120 * sy, 30 * sx, 135 * sy);
-        // V120
-        path.AddLine(30 * sx, 135 * sy, 30 * sx, 120 * sy);
-        // A20 20 0 0 1 10 100
-        path.AddArc(10 * sx, 100 * sy, 40 * sx, 40 * sy, 90, 90);
-        // V40
-        path.AddLine(10 * sx, 100 * sy, 10 * sx, 40 * sy);
-        // A20 20 0 0 1 30 20
-        path.AddArc(10 * sx, 20 * sy, 40 * sx, 40 * sy, 180, 90);
-        path.CloseFigure();
-
-        g.FillPath(brush, path);
-
-        // White Bluetooth symbol
-        using var pen = new Pen(Color.White, 2.5f);
-        pen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
-        pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
-        pen.LineJoin = System.Drawing.Drawing2D.LineJoin.Round;
-
-        // M100 40 L125 65
-        g.DrawLine(pen, 100 * sx, 40 * sy, 125 * sx, 65 * sy);
-        // L100 90
-        g.DrawLine(pen, 125 * sx, 65 * sy, 100 * sx, 90 * sy);
-        // V40
-        g.DrawLine(pen, 100 * sx, 90 * sy, 100 * sx, 40 * sy);
-        // M100 65 L80 85
-        g.DrawLine(pen, 100 * sx, 65 * sy, 80 * sx, 85 * sy);
-        // M100 65 L80 45
-        g.DrawLine(pen, 100 * sx, 65 * sy, 80 * sx, 45 * sy);
-
-        return Icon.FromHandle(bmp.GetHicon());
+        // Fallback to system icon
+        return SystemIcons.Information;
     }
 
     private static bool IsAutoStartEnabled()

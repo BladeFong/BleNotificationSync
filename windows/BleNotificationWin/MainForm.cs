@@ -61,18 +61,29 @@ public class MainForm : Form
     private void InitializeComponents()
     {
         Text = IsChinese ? "BLE 通知同步" : "BLE Notification Sync";
-        Size = new Size(500, 400);
+        Size = new Size(600, 500);
+        MinimumSize = new Size(500, 400);
         StartPosition = FormStartPosition.CenterScreen;
         ShowInTaskbar = false;
         WindowState = FormWindowState.Minimized;
         Icon = CreateBellIcon();
 
+        // Title
         var titleLabel = new Label
         {
             Text = IsChinese ? "BLE 通知同步" : "BLE Notification Sync",
-            Font = new Font("Segoe UI", 16, FontStyle.Bold),
+            Font = new Font("Segoe UI", 14, FontStyle.Bold),
             AutoSize = true,
-            Location = new Point(20, 15)
+            Dock = DockStyle.Top,
+            Padding = new Padding(10, 10, 10, 5)
+        };
+
+        // Status panel
+        var statusPanel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 60,
+            Padding = new Padding(10, 5, 10, 5)
         };
 
         _statusLabel = new Label
@@ -80,7 +91,7 @@ public class MainForm : Form
             Text = IsChinese ? "状态: 初始化中..." : "Status: Initializing...",
             Font = new Font("Segoe UI", 10),
             AutoSize = true,
-            Location = new Point(20, 55)
+            Location = new Point(10, 5)
         };
 
         _connectionLabel = new Label
@@ -88,14 +99,25 @@ public class MainForm : Form
             Text = IsChinese ? "连接数: 0" : "Connections: 0",
             Font = new Font("Segoe UI", 10),
             AutoSize = true,
-            Location = new Point(20, 80)
+            Location = new Point(10, 30)
+        };
+
+        statusPanel.Controls.Add(_statusLabel);
+        statusPanel.Controls.Add(_connectionLabel);
+
+        // Button panel
+        var buttonPanel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 50,
+            Padding = new Padding(10, 5, 10, 5)
         };
 
         _startButton = new Button
         {
             Text = IsChinese ? "启动服务" : "Start",
             Size = new Size(120, 35),
-            Location = new Point(20, 115),
+            Location = new Point(10, 5),
             Enabled = true
         };
         _startButton.Click += (s, e) => StartServer();
@@ -104,24 +126,45 @@ public class MainForm : Form
         {
             Text = IsChinese ? "停止服务" : "Stop",
             Size = new Size(120, 35),
-            Location = new Point(150, 115),
+            Location = new Point(140, 5),
             Enabled = false
         };
         _stopButton.Click += (s, e) => StopServer();
 
-        _logList = new ListBox
+        buttonPanel.Controls.Add(_startButton);
+        buttonPanel.Controls.Add(_stopButton);
+
+        // Log panel with header
+        var logPanel = new Panel
         {
-            Location = new Point(20, 165),
-            Size = new Size(455, 180),
-            Font = new Font("Consolas", 9)
+            Dock = DockStyle.Fill,
+            Padding = new Padding(10, 5, 10, 10)
         };
 
+        var logHeader = new Label
+        {
+            Text = IsChinese ? "日志:" : "Log:",
+            Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            Height = 25
+        };
+
+        _logList = new ListBox
+        {
+            Dock = DockStyle.Fill,
+            Font = new Font("Consolas", 9),
+            SelectionMode = SelectionMode.MultiExtended
+        };
+
+        logPanel.Controls.Add(_logList);
+        logPanel.Controls.Add(logHeader);
+
+        // Add controls in reverse order (Dock fills from bottom)
+        Controls.Add(logPanel);
+        Controls.Add(buttonPanel);
+        Controls.Add(statusPanel);
         Controls.Add(titleLabel);
-        Controls.Add(_statusLabel);
-        Controls.Add(_connectionLabel);
-        Controls.Add(_startButton);
-        Controls.Add(_stopButton);
-        Controls.Add(_logList);
 
         // Minimize to tray instead of closing
         FormClosing += (s, e) =>

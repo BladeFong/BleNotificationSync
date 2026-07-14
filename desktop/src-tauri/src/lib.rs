@@ -4,7 +4,7 @@ mod protocol;
 mod storage;
 
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState},
     Emitter, Manager, RunEvent, WindowEvent,
 };
@@ -38,7 +38,11 @@ pub fn run() {
             let show_item = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
             let start_item = MenuItem::with_id(app, "start", "启动服务", true, None::<&str>)?;
             let stop_item = MenuItem::with_id(app, "stop", "停止服务", true, None::<&str>)?;
-            let auto_start_item = MenuItem::with_id(app, "autostart", "开机自启动", true, None::<&str>)?;
+
+            // Check current autostart status
+            let autostart_enabled = storage::get_autostart().unwrap_or(false);
+            let auto_start_item = CheckMenuItem::with_id(app, "autostart", "开机自启动", true, autostart_enabled, None::<&str>)?;
+
             let silent_start_item = MenuItem::with_id(app, "silent", "静默启动服务", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 
@@ -71,7 +75,10 @@ pub fn run() {
                             let _ = app_handle.emit("tray-action", "stop");
                         }
                         "autostart" => {
-                            let _ = app_handle.emit("tray-action", "autostart");
+                            // Toggle autostart
+                            let current = storage::get_autostart().unwrap_or(false);
+                            let _ = storage::set_autostart(!current);
+                            let _ = app_handle.emit("tray-action", "autostart-toggled");
                         }
                         "silent" => {
                             // Hide window and start server
@@ -81,7 +88,7 @@ pub fn run() {
                             let _ = app_handle.emit("tray-action", "silent-start");
                         }
                         "quit" => {
-                            app_handle.exit(0);
+                            std::process::exit(0);
                         }
                         _ => {}
                     }

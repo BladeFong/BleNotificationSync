@@ -1,74 +1,116 @@
-use std::sync::Mutex;
-use tauri::State;
+mod ble;
+mod crypto;
+mod protocol;
+mod storage;
 
-pub struct BleState {
-    pub is_running: Mutex<bool>,
-}
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState},
+    Emitter, Manager, RunEvent, WindowEvent,
+};
 
-impl Default for BleState {
-    fn default() -> Self {
-        Self {
-            is_running: Mutex::new(false),
-        }
-    }
-}
-
-#[tauri::command]
-pub fn start_gatt_server(state: State<BleState>) -> Result<String, String> {
-    let mut is_running = state.is_running.lock().map_err(|e| e.to_string())?;
-    
-    if *is_running {
-        return Err("Server already running".to_string());
-    }
-    
-    // TODO: Implement GATT server startup
-    // This will be implemented when we add BLE support
-    
-    *is_running = true;
-    Ok("GATT server started".to_string())
-}
-
-#[tauri::command]
-pub fn stop_gatt_server(state: State<BleState>) -> Result<String, String> {
-    let mut is_running = state.is_running.lock().map_err(|e| e.to_string())?;
-    
-    if !*is_running {
-        return Err("Server not running".to_string());
-    }
-    
-    // TODO: Implement GATT server shutdown
-    
-    *is_running = false;
-    Ok("GATT server stopped".to_string())
-}
-
-#[tauri::command]
-pub fn get_status(state: State<BleState>) -> Result<String, String> {
-    let is_running = state.is_running.lock().map_err(|e| e.to_string())?;
-    Ok(if *is_running { "Running" } else { "Stopped" }.to_string())
-}
-
-#[tauri::command]
-pub fn get_mac_address() -> Result<String, String> {
-    // Get local Bluetooth MAC address using system command
-    let output = std::process::Command::new("getmac")
-        .arg("/fo")
-        .arg("csv")
-        .arg("/nh")
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for line in stdout.lines() {
-        let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() >= 1 {
-            let mac = parts[0].trim_matches('"');
-            if mac.contains('-') && mac.len() == 17 {
-                return Ok(mac.to_uppercase());
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .manage(ble::BleState::default())
+        .manage(storage::StorageState::default())
+        .invoke_handler(tauri::generate_handler![
+            ble::start_gatt_server,
+            ble::stop_gatt_server,
+            ble::get_status,
+            ble::get_mac_address,
+            storage::get_paired_devices,
+            storage::add_paired_device,
+            storage::remove_paired_device,
+            storage::set_autostart,
+            storage::get_autostart,
+        ])
+        .on_window_event(|window, event| {
+            // When close is requested, hide the window instead of destroying it
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let _ = window.hide();
+                api.prevent_close();
             }
-        }
-    }
+        })
+        .setup(|app| {
+            // Create menu items
+            let show_item = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
+            let start_item = MenuItem::with_id(app, "start", "启动服务", true, None::<&str>)?;
+            let stop_item = MenuItem::with_id(app, "stop", "停止服务", true, None::<&str>)?;
+            let auto_start_item = MenuItem::with_id(app, "autostart", "开机自启动", true, None::<&str>)?;
+            let silent_start_item = MenuItem::with_id(app, "silent", "静默启动服务", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 
-    // Fallback: return a placeholder
-    Ok("AA:BB:CC:DD:EE:FF".to_string())
+            let menu = Menu::with_items(app, &[
+                &show_item, &start_item, &stop_item,
+                &auto_start_item, &silent_start_item,
+                &quit_item,
+            ])?;
+
+            // Build single tray with menu and click handler
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().cloned().unwrap())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app_handle: &tauri::AppHandle, event| {
+                    let id = event.id().0.as_str();
+
+                    match id {
+                        "show" => {
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "start" => {
+                            let _ = app_handle.emit("tray-action", "start");
+                        }
+                        "stop" => {
+                            let _ = app_handle.emit("tray-action", "stop");
+                        }
+                        "autostart" => {
+                            let _ = app_handle.emit("tray-action", "autostart");
+                        }
+                        "silent" => {
+                            // Hide window and start server
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                let _ = window.hide();
+                            }
+                            let _ = app_handle.emit("tray-action", "silent-start");
+                        }
+                        "quit" => {
+                            app_handle.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            Ok(())
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app_handle, event| {
+        if let RunEvent::ExitRequested { api, .. } = event {
+            api.prevent_exit();
+        }
+    });
 }

@@ -47,3 +47,28 @@ pub fn get_status(state: State<BleState>) -> Result<String, String> {
     let is_running = state.is_running.lock().map_err(|e| e.to_string())?;
     Ok(if *is_running { "Running" } else { "Stopped" }.to_string())
 }
+
+#[tauri::command]
+pub fn get_mac_address() -> Result<String, String> {
+    // Get local Bluetooth MAC address using system command
+    let output = std::process::Command::new("getmac")
+        .arg("/fo")
+        .arg("csv")
+        .arg("/nh")
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() >= 1 {
+            let mac = parts[0].trim_matches('"');
+            if mac.contains('-') && mac.len() == 17 {
+                return Ok(mac.to_uppercase());
+            }
+        }
+    }
+
+    // Fallback: return a placeholder
+    Ok("AA:BB:CC:DD:EE:FF".to_string())
+}

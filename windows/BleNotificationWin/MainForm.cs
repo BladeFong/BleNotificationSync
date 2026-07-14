@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -10,7 +9,6 @@ using BleNotificationWin.Gatt;
 using BleNotificationWin.Notification;
 using BleNotificationWin.Storage;
 using Microsoft.Win32;
-using SkiaSharp;
 
 namespace BleNotificationWin;
 
@@ -248,17 +246,23 @@ public class MainForm : Form
 
     private static Icon CreateBellIcon()
     {
-        // Try to load icon.png from application directory
-        string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon.png");
-        if (File.Exists(iconPath))
+        // Try to load icon from icons directory
+        string basePath = AppDomain.CurrentDomain.BaseDirectory;
+        string[] iconFiles = { "icons/icon_32.png", "icons/icon_64.png", "icon.png" };
+
+        foreach (var file in iconFiles)
         {
-            try
+            string iconPath = Path.Combine(basePath, file);
+            if (File.Exists(iconPath))
             {
-                using var bitmap = new Bitmap(iconPath);
-                var hIcon = bitmap.GetHicon();
-                return Icon.FromHandle(hIcon);
+                try
+                {
+                    using var bitmap = new Bitmap(iconPath);
+                    var hIcon = bitmap.GetHicon();
+                    return Icon.FromHandle(hIcon);
+                }
+                catch { }
             }
-            catch { }
         }
 
         // Fallback to system icon

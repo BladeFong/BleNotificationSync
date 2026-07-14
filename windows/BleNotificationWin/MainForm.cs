@@ -246,34 +246,60 @@ public class MainForm : Form
 
     private static Icon CreateBellIcon()
     {
-        var bmp = new Bitmap(32, 32);
+        // Create at higher resolution then scale down for better quality
+        var bmp = new Bitmap(64, 64);
         using var g = Graphics.FromImage(bmp);
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
         g.Clear(Color.Transparent);
 
-        // Blue notification bubble with tail (matching user's SVG design)
+        // Scale factor: SVG viewBox 200x140 -> 64x64
+        float sx = 64f / 200f;
+        float sy = 64f / 140f;
+
+        // Blue notification bubble (from user's SVG)
         using var bubbleBrush = new SolidBrush(Color.FromArgb(37, 99, 235));  // #2563EB
         var bubblePath = new System.Drawing.Drawing2D.GraphicsPath();
-        bubblePath.AddArc(4, 2, 24, 20, 180, 180);  // top
-        bubblePath.AddArc(4, 14, 24, 16, 0, 90);    // bottom-left
-        bubblePath.AddLine(4, 30, 8, 34);            // tail
-        bubblePath.AddLine(8, 34, 10, 30);           // tail
-        bubblePath.AddArc(4, 14, 24, 16, 90, 90);    // bottom-right
+
+        // SVG: M30 20 H170 A20 20 0 0 1 190 40 V100 A20 20 0 0 1 170 120 H50 L30 135 V120 A20 20 0 0 1 10 100 V40 A20 20 0 0 1 30 20 Z
+        bubblePath.StartFigure();
+        bubblePath.AddLine(30 * sx, 20 * sy, 170 * sx, 20 * sy);  // top line
+        bubblePath.AddArc(170 * sx, 20 * sy, 40 * sx, 40 * sy, 270, 90);  // top-right corner
+        bubblePath.AddLine(190 * sx, 40 * sy, 190 * sx, 100 * sy);  // right side
+        bubblePath.AddArc(170 * sx, 100 * sy, 40 * sx, 40 * sy, 0, 90);  // bottom-right corner
+        bubblePath.AddLine(170 * sx, 120 * sy, 50 * sx, 120 * sy);  // bottom line
+        bubblePath.AddLine(50 * sx, 120 * sy, 30 * sx, 135 * sy);  // tail down
+        bubblePath.AddLine(30 * sx, 135 * sy, 30 * sx, 120 * sy);  // tail up
+        bubblePath.AddArc(10 * sx, 100 * sy, 40 * sx, 40 * sy, 90, 90);  // bottom-left corner
+        bubblePath.AddLine(10 * sx, 100 * sy, 10 * sx, 40 * sy);  // left side
+        bubblePath.AddArc(10 * sx, 20 * sy, 40 * sx, 40 * sy, 180, 90);  // top-left corner
         bubblePath.CloseFigure();
         g.FillPath(bubbleBrush, bubblePath);
 
-        // White Bluetooth symbol inside
-        using var btPen = new Pen(Color.White, 2f);
+        // White Bluetooth symbol (from user's SVG)
+        using var btPen = new Pen(Color.White, 5f);
         btPen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
         btPen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
         btPen.LineJoin = System.Drawing.Drawing2D.LineJoin.Round;
 
-        // Bluetooth: vertical line + two diagonal lines
-        g.DrawLine(btPen, 16, 8, 16, 24);    // center vertical
-        g.DrawLine(btPen, 16, 12, 11, 16);   // top-left diagonal
-        g.DrawLine(btPen, 16, 20, 11, 24);   // bottom-left diagonal
+        // SVG: M100 40 L125 65 L100 90 V40 (main shape)
+        g.DrawLine(btPen, 100 * sx, 40 * sy, 125 * sx, 65 * sy);  // top-right
+        g.DrawLine(btPen, 125 * sx, 65 * sy, 100 * sx, 90 * sy);  // bottom-right
+        g.DrawLine(btPen, 100 * sx, 90 * sy, 100 * sx, 40 * sy);  // vertical up
 
-        return Icon.FromHandle(bmp.GetHicon());
+        // SVG: M100 65 L80 85 (bottom-left branch)
+        g.DrawLine(btPen, 100 * sx, 65 * sy, 80 * sx, 85 * sy);
+
+        // SVG: M100 65 L80 45 (top-left branch)
+        g.DrawLine(btPen, 100 * sx, 65 * sy, 80 * sx, 45 * sy);
+
+        // Scale down to 32x32
+        var finalBmp = new Bitmap(32, 32);
+        using var g2 = Graphics.FromImage(finalBmp);
+        g2.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        g2.DrawImage(bmp, 0, 0, 32, 32);
+
+        return Icon.FromHandle(finalBmp.GetHicon());
     }
 
     private static bool IsAutoStartEnabled()

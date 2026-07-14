@@ -41,12 +41,18 @@ public class GattServerService : IDisposable
     {
         try
         {
+            OnStatusChanged?.Invoke(this, "Checking Bluetooth adapter...");
+
             var adapter = await BluetoothAdapter.GetDefaultAsync();
             if (adapter == null)
             {
                 OnStatusChanged?.Invoke(this, "No Bluetooth adapter found");
                 return false;
             }
+
+            OnStatusChanged?.Invoke(this, $"Adapter found: {adapter.BluetoothAddress.ToString("X12")}");
+
+            OnStatusChanged?.Invoke(this, "Creating GATT service...");
 
             var serviceResult = await GattServiceProvider.CreateAsync(ServiceUuid);
             if (serviceResult.Error != BluetoothError.Success)
@@ -56,6 +62,7 @@ public class GattServerService : IDisposable
             }
 
             _serviceProvider = serviceResult.ServiceProvider;
+            OnStatusChanged?.Invoke(this, "GATT service created");
 
             var characteristicParameters = new GattLocalCharacteristicParameters
             {
@@ -77,6 +84,8 @@ public class GattServerService : IDisposable
             _writeCharacteristic = characteristicResult.Characteristic;
             _writeCharacteristic.WriteRequested += OnWriteRequested;
 
+            OnStatusChanged?.Invoke(this, "Starting advertising...");
+
             _serviceProvider.StartAdvertising(new GattServiceProviderAdvertisingParameters
             {
                 IsConnectable = true,
@@ -88,12 +97,12 @@ public class GattServerService : IDisposable
             _publisher.Start();
 
             _isRunning = true;
-            OnStatusChanged?.Invoke(this, "GATT Server started");
+            OnStatusChanged?.Invoke(this, "GATT Server started successfully");
             return true;
         }
         catch (Exception ex)
         {
-            OnStatusChanged?.Invoke(this, $"Start error: {ex.Message}");
+            OnStatusChanged?.Invoke(this, $"Start error: {ex.Message}\nStack: {ex.StackTrace}");
             return false;
         }
     }

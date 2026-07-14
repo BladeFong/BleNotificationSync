@@ -12,8 +12,14 @@
 | 平台 | 语言 | UI 框架 | 最低版本 |
 |------|------|---------|----------|
 | Android SDK | Kotlin | 无（纯 SDK） | API 23 (Android 6.0) |
-| Windows | C# / .NET 8 | WinForms + NotifyIcon | Windows 10 1709+ (Build 16299) |
-| macOS | Swift | SwiftUI MenuBarExtra | macOS 13 (Ventura) |
+| PC/Mac | Rust + Web | Tauri + HTML/JS | Windows 10 1709+ / macOS 13+ |
+
+**Tauri 方案选择理由**：
+- Windows 和 macOS 共享同一套 UI 和业务代码
+- Web 技术栈（HTML/CSS/JS）开发效率高
+- Rust 后端性能好、内存安全
+- 包体积小（~5-10MB）
+- 跨平台 BLE 通过平台特定 Rust binding 实现
 
 **Android API 23 选择理由**：
 - 覆盖 99.2% 活跃设备
@@ -119,12 +125,15 @@
 
 ### 2.5.1 加密库
 
-三端均以 **源码方式** 集成 **LibTomCrypt**，使用 **AES-CCM** 算法（推荐 CCM* 模式）。
+| 平台 | 加密库 | 算法 |
+|------|--------|------|
+| Android | LibTomCrypt (JNI) | AES-GCM |
+| PC/Mac | aes-gcm (Rust crate) | AES-GCM |
 
-**集成方式**：
-- Android：JNI 调用 LibTomCrypt C 源码
-- Windows：直接编译 LibTomCrypt 源码（.NET P/Invoke 或 C++/CLI）
-- macOS：Swift 通过 Bridging Header 调用 LibTomCrypt C 源码
+**选择 AES-GCM 的理由**：
+- Rust 生态支持好（aes-gcm crate）
+- AEAD 认证加密，与 AES-CCM 同等安全
+- API 更简洁，易于跨平台一致
 
 ### 2.5.2 密钥管理
 
@@ -155,7 +164,7 @@ key = HKDF-SHA256(
 | 1. plaintext = JSON 通知内容          |
 |    (title, body, timestamp)          |
 | 2. 生成随机数 nonce (8-13 字节)      |
-| 3. ciphertext = AES-CCM-Encrypt(     |
+| 3. ciphertext = AES-GCM-Encrypt(     |
 |       key, nonce, plaintext)         |
 | 4. 发送: [package | nonce | ciphertext]|
 |    (package 明文，其余加密)           |
@@ -165,7 +174,7 @@ key = HKDF-SHA256(
 |                                      | 7. MAC + Package   |
 |                                      |    → 查找密钥       |
 |                                      | 8. plaintext =     |
-|                                      |    AES-CCM-Decrypt |
+|                                      |    AES-GCM-Decrypt |
 |                                      |    (key, nonce,    |
 |                                      |     ciphertext)    |
 +------------------+                    +------------------+
@@ -185,7 +194,7 @@ key = HKDF-SHA256(
 
 **设计说明**：
 - **Package**：APP 包名，明文传输，用于 GATT Server 查找对应密钥
-- **Nonce**：随机数，明文传输，用于 AES-CCM 解密
+- **Nonce**：随机数，明文传输，用于 AES-GCM 解密
 - **Ciphertext**：加密的 JSON 通知内容（title、body、timestamp 等）
 
 **解密逻辑**：
@@ -570,7 +579,7 @@ BleNotificationMac/
 | 模块 | 测试内容 |
 |------|----------|
 | 协议层 | 分片/重组、帧解析、消息类型编码 |
-| 加密层 | AES-CCM 加解密、密钥派生、nonce 生成 |
+| 加密层 | AES-GCM 加解密、密钥派生、nonce 生成 |
 | SDK API | setReminder / cancelReminder 逻辑 |
 | 配对解析 | 二维码 URL 解析 |
 
@@ -599,26 +608,34 @@ BleNotificationMac/
 
 ```
 BleNotificationSync/
-├── third_party/          # 第三方库源码
-│   └── libtomcrypt/      # LibTomCrypt 源码（MIT 许可）
-├── android/              # Android SDK (Kotlin AAR)
-│   ├── sdk/              # SDK 核心模块
-│   │   ├── crypto/       # 加密模块 (JNI 桥接)
-│   │   └── ble/          # BLE 通信模块
-│   ├── sample/           # 示例 App
+├── third_party/              # 第三方库源码
+│   └── libtomcrypt/          # LibTomCrypt 源码（MIT 许可）
+├── android/                  # Android SDK (Kotlin AAR)
+│   ├── sdk/                  # SDK 核心模块
+│   │   ├── crypto/           # 加密模块 (JNI 桥接)
+│   │   ├── ble/              # BLE 通信模块
+│   │   ├── protocol/         # 协议编解码
+│   │   ├── qr/               # 二维码扫描
+│   │   └── pairing/          # 配对管理
+│   ├── sample/               # 示例 App
 │   └── build.gradle.kts
-├── windows/              # Windows 端 (C# .NET)
-│   ├── BleNotificationWin/
-│   │   ├── Crypto/       # 加密模块 (P/Invoke 桥接)
-│   │   └── BleNotificationWin.sln
-├── macos/                # macOS 端 (Swift)
-│   ├── BleNotificationMac/
-│   │   ├── Crypto/       # 加密模块 (Bridging Header 桥接)
-│   │   └── BleNotificationMac.xcodeproj
-├── docs/                 # 文档
-│   ├── protocol.md       # 协议规范
-│   └── architecture.md   # 架构说明
-├── examples/             # 集成示例
+├── desktop/                  # Tauri 跨平台桌面端 (Rust + Web)
+│   ├── src-tauri/            # Rust 后端
+│   │   ├── src/
+│   │   │   ├── main.rs       # 入口
+│   │   │   ├── ble.rs        # BLE GATT Server
+│   │   │   ├── crypto.rs     # 加密模块
+│   │   │   ├── protocol.rs   # 协议编解码
+│   │   │   └── storage.rs    # 配对/密钥存储
+│   │   ├── Cargo.toml
+│   │   └── tauri.conf.json
+│   ├── src/                  # Web 前端
+│   │   ├── index.html
+│   │   ├── main.js
+│   │   └── styles.css
+│   └── package.json
+├── docs/                     # 文档
+│   └── superpowers/          # 设计文档
 ├── LICENSE
 └── README.md
 ```
@@ -629,9 +646,9 @@ BleNotificationSync/
 
 | 阶段 | 内容 | 产出 |
 |------|------|------|
-| 1 | 协议规范文档 | docs/protocol.md |
-| 2 | 加密模块实现 | 三端 LibTomCrypt 集成 |
-| 3 | Android SDK 实现 | 可集成的 AAR 库（含加密） |
-| 4 | Windows 端实现 | 可运行的 GATT Server + 通知 |
-| 5 | macOS 端实现 | 可运行的 GATT Server + 通知 |
-| 6 | 联调测试 | 三端互通验证（含加密） |
+| 1 | 协议规范文档 | 设计文档 |
+| 2 | Android SDK 实现 | 可集成的 AAR 库（含加密） |
+| 3 | Tauri 桌面端骨架 | 可运行的空窗口 + BLE 基础 |
+| 4 | Tauri BLE GATT Server | 接收通知功能 |
+| 5 | Tauri UI 实现 | 配对/状态/日志界面 |
+| 6 | 联调测试 | Android + PC/Mac 互通验证 |

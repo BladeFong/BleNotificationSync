@@ -2,18 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 实现跨平台 BLE 闹钟通知同步 SDK，包含 Android SDK、Windows 端和 macOS 端，支持 HKDF + AES-CCM 加密。
+**Goal:** 实现跨平台 BLE 闹钟通知同步，包含 Android SDK 和 Tauri 桌面端（Windows + macOS），支持 HKDF + AES-GCM 加密。
 
-**Architecture:** Android 端作为 GATT Client，PC/Mac 端作为 GATT Server。每次通知独立连接，用完即断。使用 LibTomCrypt 源码集成实现加密。
+**Architecture:** Android 端作为 GATT Client，PC/Mac 端（Tauri）作为 GATT Server。每次通知独立连接，用完即断。使用 LibTomCrypt 源码集成实现加密。
 
-**Tech Stack:** Kotlin (Android), C# / .NET 8 (Windows), Swift (macOS), LibTomCrypt (加密)
+**Tech Stack:** Kotlin (Android), Rust + Web (Tauri Desktop), LibTomCrypt (加密)
 
 ## Global Constraints
 
 - Android minSdkVersion: API 23 (Android 6.0 Marshmallow)
-- Windows minVersion: Windows 10 1709+ (Build 16299)
-- LibTomCrypt 必须以源码方式集成（third_party/libtomcrypt/）
-- AES-CCM 认证加密，密钥由 HKDF-SHA256 从包名派生
+- Tauri 桌面端：Windows 10 1709+ / macOS 13+
+- LibTomCrypt 必须以源码方式集成
+- AES-GCM 认证加密，密钥由 HKDF-SHA256 从包名派生
 - 三端加密行为必须一致
 - BLE MTU 协商目标 247 字节
 - 单次通知 payload 最大 240 字节
@@ -32,7 +32,7 @@ BleNotificationSync/
 │   │   ├── src/main/
 │   │   │   ├── java/com/ble/notification/
 │   │   │   │   ├── crypto/
-│   │   │   │   │   ├── AesCcmCrypto.kt      # AES-CCM 加解密
+│   │   │   │   │   ├── AesCcmCrypto.kt      # AES-GCM 加解密
 │   │   │   │   │   └── KeyDerivation.kt     # HKDF 密钥派生
 │   │   │   │   ├── protocol/
 │   │   │   │   │   ├── FrameEncoder.kt      # 帧编码
@@ -224,7 +224,7 @@ Java_com_ble_notification_crypto_NativeCrypto_aesCcmEncrypt(
     unsigned char *out = malloc(plain_len + 16);
     unsigned long out_len = plain_len + 16;
     
-    int err = aes_ccm_memory(
+    int err = aes_gcm_memory(
         key_data, key_len,
         nonce_data, nonce_len,
         plain_data, plain_len,
@@ -269,7 +269,7 @@ Java_com_ble_notification_crypto_NativeCrypto_aesCcmDecrypt(
     unsigned char *out = malloc(plain_len);
     unsigned long out_len = plain_len;
     
-    int err = aes_ccm_memory(
+    int err = aes_gcm_memory(
         key_data, key_len,
         nonce_data, nonce_len,
         cipher_data, plain_len,  // ciphertext without tag
@@ -417,7 +417,7 @@ add_library(tomcrypt STATIC
     ${TOMCRYPT_DIR}/misc/pkcs5/pkcs5_hkdf.c
     ${TOMCRYPT_DIR}/aes/aes.c
     ${TOMCRYPT_DIR}/hashes/sha256.c
-    ${TOMCRYPT_DIR}/mac/ccm/ccm_memory.c
+    ${TOMCRYPT_DIR}/mac/ccm/aes_gcm_memory.c
 )
 
 target_compile_definitions(tomcrypt PRIVATE
@@ -446,7 +446,7 @@ Expected: PASS
 
 ```bash
 git add android/sdk/src/main/native android/sdk/src/main/java/com/ble/notification/crypto
-git commit -m "feat(android): add LibTomCrypt JNI bridge for AES-CCM and HKDF"
+git commit -m "feat(android): add LibTomCrypt JNI bridge for AES-GCM and HKDF"
 ```
 
 ---
@@ -595,7 +595,7 @@ object AesCcmCrypto {
         val key = KeyDerivation.deriveKey(packageName)
         val nonce = ByteArray(NONCE_SIZE).also { SecureRandom().nextBytes(it) }
         val ciphertext = NativeCrypto.aesCcmEncrypt(key, nonce, plaintext)
-            ?: throw RuntimeException("AES-CCM encryption failed")
+            ?: throw RuntimeException("AES-GCM encryption failed")
         
         return EncryptedPayload(nonce, ciphertext)
     }
@@ -616,7 +616,7 @@ Expected: PASS
 
 ```bash
 git add android/sdk/src/main/java/com/ble/notification/crypto/AesCcmCrypto.kt
-git commit -m "feat(android): add AES-CCM encryption service"
+git commit -m "feat(android): add AES-GCM encryption service"
 ```
 
 ---
@@ -1523,7 +1523,7 @@ namespace BleNotificationWin.Crypto
         private static extern int register_all_hash();
 
         [DllImport(DllName)]
-        private static extern int aes_ccm_memory(
+        private static extern int aes_gcm_memory(
             byte[] key, int keylen,
             byte[] nonce, int noncelen,
             byte[] pt, int ptlen,
@@ -1556,14 +1556,14 @@ namespace BleNotificationWin.Crypto
             var ct = new byte[plaintext.Length + 16];
             ulong ctLen = (ulong)plaintext.Length;
             
-            int err = aes_ccm_memory(
+            int err = aes_gcm_memory(
                 key, key.Length,
                 nonce, nonce.Length,
                 plaintext, plaintext.Length,
                 ct, ref ctLen,
                 ct, 16);
             
-            if (err != 0) throw new CryptographicException("AES-CCM encryption failed");
+            if (err != 0) throw new CryptographicException("AES-GCM encryption failed");
             
             var result = new byte[ctLen + 16];
             Array.Copy(ct, result, (int)ctLen);
@@ -1584,7 +1584,7 @@ namespace BleNotificationWin.Crypto
             var tag = new byte[16];
             Array.Copy(ciphertext, ptLen, tag, 0, 16);
             
-            int err = aes_ccm_memory(
+            int err = aes_gcm_memory(
                 key, key.Length,
                 nonce, nonce.Length,
                 pt, ptLen,
@@ -1689,7 +1689,7 @@ namespace BleNotificationWin.Crypto
 
 ```bash
 git add windows/BleNotificationWin/Crypto
-git commit -m "feat(windows): add LibTomCrypt bridge for AES-CCM and HKDF"
+git commit -m "feat(windows): add LibTomCrypt bridge for AES-GCM and HKDF"
 ```
 
 ---
@@ -1847,7 +1847,7 @@ class LibTomCryptBridge {
                     ct.withUnsafeMutableBytes { ctPtr in
                         var tag = Data(count: 16)
                         return tag.withUnsafeMutableBytes { tagPtr in
-                            aes_ccm_memory(
+                            aes_gcm_memory(
                                 keyPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(key.count),
                                 noncePtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(nonce.count),
                                 ptPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(plaintext.count),
@@ -1882,7 +1882,7 @@ class LibTomCryptBridge {
                     ciphertext.withUnsafeBytes { ctPtr in
                         var tag = Data(ciphertext.suffix(16))
                         return tag.withUnsafeMutableBytes { tagPtr in
-                            aes_ccm_memory(
+                            aes_gcm_memory(
                                 keyPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(key.count),
                                 noncePtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(nonce.count),
                                 ptPtr.baseAddress!.assumingMemoryBound(to: UInt8.self), Int32(ptLen),
@@ -1904,7 +1904,7 @@ class LibTomCryptBridge {
 
 ```bash
 git add macos/BleNotificationMac/Crypto macos/BleNotificationMac/Bridging-Header.h
-git commit -m "feat(macos): add LibTomCrypt bridge for AES-CCM and HKDF"
+git commit -m "feat(macos): add LibTomCrypt bridge for AES-GCM and HKDF"
 ```
 
 ---

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLE Notification Sync</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="status-section">
+            <div class="status-item">
+                <span class="label" data-i18n="status">状态:</span>
+                <span id="status" class="value" data-i18n="stopped">未启动</span>
+            </div>
+            <div class="status-item">
+                <span class="label" data-i18n="connections">连接数:</span>
+                <span id="connections" class="value">0</span>
+            </div>
+        </div>
+        
+        <div class="button-group">
+            <button id="startBtn" class="btn btn-primary" data-i18n="start">启动服务</button>
+            <button id="stopBtn" class="btn btn-danger" disabled data-i18n="stop">停止服务</button>
+            <button id="pairBtn" class="btn btn-secondary" data-i18n="pair">扫码绑定</button>
+        </div>
+        
+        <div class="log-section">
+            <div id="logBox" class="log-box"></div>
+        </div>
+    </div>
+    
+    <script>
+        // Language detection - set HTML lang and translate static elements
+        const isChinese = navigator.language.startsWith('zh');
+        document.documentElement.lang = isChinese ? 'zh-CN' : 'en';
+        
+        const translations = {
+            zh: { status: '状态:', stopped: '未启动', connections: '连接数:', start: '启动服务', stop: '停止服务', pair: '扫码绑定' },
+            en: { status: 'Status:', stopped: 'Stopped', connections: 'Connections:', start: 'Start', stop: 'Stop', pair: 'Pair Device' }
+        };
+        
+        const t = isChinese ? translations.zh : translations.en;
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            el.textContent = t[el.dataset.i18n] || el.textContent;
+        });
+    </script>
+    <script type="module" src="main.js"></script>
+</body>
+</html>

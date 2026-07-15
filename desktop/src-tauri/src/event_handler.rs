@@ -15,7 +15,7 @@ pub fn handle_menu_event(app_handle: &AppHandle, event_id: &str) {
 }
 
 /// Add log message to frontend
-fn add_log(app_handle: &AppHandle, is_running: bool, message: &str) {
+fn add_log(app_handle: &AppHandle, message: &str) {
     let _ = app_handle.emit("log-message", message);
 }
 
@@ -37,11 +37,11 @@ pub fn toggle_ble_service(app_handle: &AppHandle) {
     if *is_running {
         *is_running = false;
         sync_ble_status(app_handle);
-        add_log(app_handle, false, "GATT 服务已停止");
+        add_log(app_handle, "GATT 服务已停止");
     } else {
         *is_running = true;
         sync_ble_status(app_handle);
-        add_log(app_handle, true, "GATT 服务已启动");
+        add_log(app_handle, "GATT 服务已启动");
     }
 }
 
@@ -59,7 +59,6 @@ fn toggle_silent_mode(app_handle: &AppHandle) {
 
 /// Quit application
 fn quit_app(app_handle: &AppHandle) {
-    // Stop BLE service before exiting
     let state = app_handle.state::<ble::BleState>();
     let mut is_running = state.is_running.lock().unwrap();
     if *is_running {

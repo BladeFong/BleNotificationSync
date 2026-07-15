@@ -54,6 +54,9 @@ pub fn run() {
             let silent_item = CheckMenuItem::with_id(app, "silent", "静默启动服务", true, silent_enabled, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 
+            // Save reference for dynamic updates
+            let ble_service_ref = ble_service_item.clone();
+
             let menu = Menu::with_items(app, &[
                 &show_item, &ble_service_item,
                 &auto_start_item, &silent_item,
@@ -86,6 +89,7 @@ pub fn run() {
                     let _ = window.hide();
                 }
                 event_handler::start_ble_service(app.handle());
+                let _ = ble_service_ref.set_checked(true);
             } else {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();

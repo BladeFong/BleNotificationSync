@@ -1,13 +1,13 @@
 mod ble;
 mod crypto;
+mod event_handler;
 mod protocol;
 mod storage;
 
-use std::sync::Arc;
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState},
-    Emitter, Manager, RunEvent, WindowEvent,
+    Manager, RunEvent, WindowEvent,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -54,10 +54,6 @@ pub fn run() {
             let silent_item = CheckMenuItem::with_id(app, "silent", "静默启动服务", true, silent_enabled, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 
-            // Clone for event handler
-            let ble_service_ref = ble_service_item.clone();
-            let ble_service_ref2 = ble_service_item.clone();
-
             let menu = Menu::with_items(app, &[
                 &show_item, &ble_service_item,
                 &auto_start_item, &silent_item,
@@ -69,54 +65,8 @@ pub fn run() {
                 .icon(app.default_window_icon().cloned().unwrap())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(move |app_handle: &tauri::AppHandle, event| {
-                    let id = event.id().0.as_str();
-
-                    match id {
-                        "show" => {
-                            if let Some(window) = app_handle.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.unminimize();
-                                let _ = window.set_focus();
-                                // Sync BLE state to frontend
-                                let state = app_handle.state::<ble::BleState>();
-                                let is_running = *state.is_running.lock().unwrap();
-                                let _ = app_handle.emit("ble-status-sync", is_running);
-                            }
-                        }
-                        "ble_service" => {
-                            // Toggle BLE service
-                            let state = app_handle.state::<ble::BleState>();
-                            let mut is_running = state.is_running.lock().unwrap();
-                            if *is_running {
-                                *is_running = false;
-                                let _ = app_handle.emit("ble-status-sync", false);
-                                let _ = ble_service_ref.set_checked(false);
-                            } else {
-                                *is_running = true;
-                                let _ = app_handle.emit("ble-status-sync", true);
-                                let _ = ble_service_ref.set_checked(true);
-                            }
-                        }
-                        "autostart" => {
-                            let current = storage::get_autostart().unwrap_or(false);
-                            let _ = storage::set_autostart(!current);
-                        }
-                        "silent" => {
-                            let current = storage::get_silent_mode().unwrap_or(false);
-                            let _ = storage::set_silent_mode(!current);
-                        }
-                        "quit" => {
-                            // Stop BLE service before exiting
-                            let state = app_handle.state::<ble::BleState>();
-                            let mut is_running = state.is_running.lock().unwrap();
-                            if *is_running {
-                                *is_running = false;
-                            }
-                            std::process::exit(0);
-                        }
-                        _ => {}
-                    }
+                .on_menu_event(|app_handle, event| {
+                    event_handler::handle_menu_event(app_handle, event.id().0.as_str());
                 })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
@@ -125,30 +75,18 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.unminimize();
-                            let _ = window.set_focus();
-                        }
+                        event_handler::show_window(tray.app_handle());
                     }
                 })
                 .build(app)?;
 
-            // If silent mode is enabled, hide window and start BLE service
+            // Handle silent mode on startup
             if silent_enabled {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.hide();
                 }
-                // Directly start BLE service and update menu check state
-                let state = app.state::<ble::BleState>();
-                let mut is_running = state.is_running.lock().unwrap();
-                if !*is_running {
-                    *is_running = true;
-                    let _ = ble_service_ref2.set_checked(true);
-                }
+                event_handler::start_ble_service(app.handle());
             } else {
-                // Normal mode: show window
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();

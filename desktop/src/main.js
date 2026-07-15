@@ -7,7 +7,6 @@ const isChinese = navigator.language.startsWith('zh');
 
 // DOM elements
 const statusEl = document.getElementById('status');
-const connectionsEl = document.getElementById('connections');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const pairBtn = document.getElementById('pairBtn');
@@ -27,8 +26,8 @@ function addLog(message) {
 
 // Update UI state
 function updateUI() {
-    statusEl.textContent = isRunning 
-        ? (isChinese ? '运行中' : 'Running') 
+    statusEl.textContent = isRunning
+        ? (isChinese ? '运行中' : 'Running')
         : (isChinese ? '未启动' : 'Stopped');
     startBtn.disabled = isRunning;
     stopBtn.disabled = !isRunning;
@@ -66,7 +65,6 @@ stopBtn.addEventListener('click', stopServer);
 
 // Pair device - show dialog with QR code
 pairBtn.addEventListener('click', () => {
-    // Show dialog immediately with loading state
     const uuid = '0000A1B2-0000-1000-8000-00805F9B34FB';
     const dialog = document.createElement('div');
     dialog.id = 'pairDialog';
@@ -129,22 +127,11 @@ pairBtn.addEventListener('click', () => {
     });
 });
 
-// Listen for tray menu events
-listen('tray-action', async (event) => {
-    const action = event.payload;
-    if (action === 'start') {
-        await startServer();
-    } else if (action === 'stop') {
-        await stopServer();
-    }
-});
-
-// Listen for BLE status sync (when window shows or service toggles)
+// Unified BLE status sync (from Rust backend)
 listen('ble-status-sync', (event) => {
     const wasRunning = isRunning;
     isRunning = event.payload;
     updateUI();
-    // Only add log if status actually changed
     if (isRunning && !wasRunning) {
         addLog(isChinese ? 'GATT 服务已启动' : 'GATT server started');
     } else if (!isRunning && wasRunning) {
@@ -152,12 +139,12 @@ listen('ble-status-sync', (event) => {
     }
 });
 
-// Listen for show window event from tray
-listen('tray-show-window', async () => {
+// Listen for window show event from tray
+listen('show-window', () => {
     const window = getCurrentWindow();
-    await window.show();
-    await window.unminimize();
-    await window.setFocus();
+    window.show();
+    window.unminimize();
+    window.setFocus();
 });
 
 // Initialize

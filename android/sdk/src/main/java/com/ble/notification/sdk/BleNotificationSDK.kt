@@ -1,15 +1,13 @@
 package com.ble.notification.sdk
 
 import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCallback
-import android.bluetooth.BluetoothGattCharacteristic
-import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.fragment.app.FragmentActivity
 import com.ble.notification.ble.BleClient
 import com.ble.notification.ble.ConnectionCallback
+import com.ble.notification.pairing.PairedDevice
 import com.ble.notification.pairing.PairingCallback
 import com.ble.notification.pairing.PairingManager
 import com.ble.notification.protocol.FrameEncoder
@@ -17,13 +15,14 @@ import com.ble.notification.qr.QrScannerFragment
 
 interface SendCallback {
     fun onSuccess()
-    fun onError(error: String)
+    fun onError(error: SdkError)
 }
 
 class BleNotificationSDK private constructor(private val context: Context) {
 
-    private val pairingManager = PairingManager()
+    private val pairingManager = PairingManager(context)
     private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile private var closed = false
 
     companion object {
         @Volatile
@@ -42,25 +41,24 @@ class BleNotificationSDK private constructor(private val context: Context) {
         }
     }
 
-    fun startPairing(activity: FragmentActivity, callback: PairingCallback) {
+    fun startPairing(activity: FragmentActivity, appName: String, callback: PairingCallback) {
+        if (checkClosed(callback)) return
+        val packageName = context.packageName
+
         val fragment = QrScannerFragment.newInstance { qrResult ->
             if (qrResult == null) {
-                callback.onError("QR scan cancelled or failed")
+                callback.onError(SdkError.Unknown("QR scan cancelled or failed"))
                 return@newInstance
             }
-            pairingManager.startPairing(context, qrResult, object : PairingCallback {
+
+            pairingManager.startPairing(qrResult, appName, packageName, object : PairingCallback {
                 override fun onScanSuccess() = callback.onScanSuccess()
                 override fun onConnecting() = callback.onConnecting()
                 override fun onRegistering() = callback.onRegistering()
                 override fun onPaired() {
-                    pairingManager.savePairing(
-                        packageName = context.packageName,
-                        mac = qrResult.mac,
-                        appName = qrResult.uuid
-                    )
                     callback.onPaired()
                 }
-                override fun onError(error: String) = callback.onError(error)
+                override fun onError(error: SdkError) = callback.onError(error)
             })
         }
 
@@ -70,15 +68,18 @@ class BleNotificationSDK private constructor(private val context: Context) {
             .commit()
     }
 
-    fun isPaired(packageName: String): Boolean {
-        return pairingManager.isPaired(packageName)
-    }
+    fun isPaired(packageName: String): Boolean = pairingManager.isPaired(packageName)
+
+    fun getPairedDevices(): List<PairedDevice> = pairingManager.getPairedDevices()
+
+    fun unpair(packageName: String) = pairingManager.unpair(packageName)
 
     fun sendNotification(title: String, body: String, callback: SendCallback? = null) {
+        if (checkClosed(callback)) return
         val packageName = context.packageName
         val mac = pairingManager.getPairedMac(packageName)
             ?: run {
-                callback?.onError("No paired device found for package: $packageName")
+                callback?.onError(SdkError.NotPaired())
                 return
             }
 
@@ -95,7 +96,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 val characteristic = service?.getCharacteristic(BleClient.WRITE_CHARACTERISTIC_UUID)
 
                 if (characteristic == null) {
-                    callback?.onError("Required BLE service/characteristic not found")
+                    callback?.onError(SdkError.ServiceNotFound())
                     gatt.disconnect()
                     gatt.close()
                     return
@@ -104,16 +105,36 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 characteristic.value = frame
                 gatt.writeCharacteristic(characteristic)
 
-                // BLE write is async; use a timeout to ensure cleanup
                 mainHandler.postDelayed({
                     gatt.disconnect()
                     gatt.close()
                 }, 3000)
             }
 
-            override fun onError(error: String) {
+            override fun onError(error: SdkError) {
                 callback?.onError(error)
             }
         })
+    }
+
+    fun close() {
+        closed = true
+        mainHandler.removeCallbacksAndMessages(null)
+    }
+
+    private fun checkClosed(callback: PairingCallback?): Boolean {
+        if (closed) {
+            callback?.onError(SdkError.Closed())
+            return true
+        }
+        return false
+    }
+
+    private fun checkClosed(callback: SendCallback?): Boolean {
+        if (closed) {
+            callback?.onError(SdkError.Closed())
+            return true
+        }
+        return false
     }
 }

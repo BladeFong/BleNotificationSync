@@ -16,6 +16,9 @@ pub struct AppState {
     pub ble_service_item: Arc<Mutex<Option<CheckMenuItem<tauri::Wry>>>>,
 }
 
+unsafe impl Send for AppState {}
+unsafe impl Sync for AppState {}
+
 impl AppState {
     pub fn new() -> Self {
         Self {

@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Emitter, Manager};
 use crate::ble;
 use crate::storage;
+use crate::AppState;
 
 /// Handle all tray menu events
 pub fn handle_menu_event(app_handle: &AppHandle, event_id: &str) {
@@ -43,6 +44,10 @@ pub fn toggle_ble_service(app_handle: &AppHandle) {
         sync_ble_status(app_handle);
         add_log(app_handle, "GATT 服务已启动");
     }
+
+    // Update menu check state
+    let app_state = app_handle.state::<AppState>();
+    app_state.set_ble_service_checked(*is_running);
 }
 
 /// Toggle autostart setting
@@ -81,4 +86,7 @@ pub fn start_ble_service(app_handle: &AppHandle) {
     if !*is_running {
         *is_running = true;
     }
+    // Update menu check state
+    let app_state = app_handle.state::<AppState>();
+    app_state.set_ble_service_checked(*is_running);
 }

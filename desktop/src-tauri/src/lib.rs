@@ -4,11 +4,33 @@ mod event_handler;
 mod protocol;
 mod storage;
 
+use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState},
     Manager, RunEvent, WindowEvent,
 };
+
+/// Global state for menu updates
+pub struct AppState {
+    pub ble_service_item: Arc<Mutex<Option<CheckMenuItem<tauri::Wry>>>>,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self {
+            ble_service_item: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn set_ble_service_checked(&self, checked: bool) {
+        if let Ok(guard) = self.ble_service_item.lock() {
+            if let Some(item) = &*guard {
+                let _ = item.set_checked(checked);
+            }
+        }
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,6 +45,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(ble::BleState::default())
         .manage(storage::StorageState::default())
+        .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             ble::start_gatt_server,
             ble::stop_gatt_server,
@@ -63,6 +86,10 @@ pub fn run() {
                 &quit_item,
             ])?;
 
+            // Store in AppState
+            let app_state = app.state::<AppState>();
+            *app_state.ble_service_item.lock().unwrap() = Some(ble_service_ref);
+
             // Build tray with menu
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().unwrap())
@@ -89,7 +116,8 @@ pub fn run() {
                     let _ = window.hide();
                 }
                 event_handler::start_ble_service(app.handle());
-                let _ = ble_service_ref.set_checked(true);
+                let state = app.state::<AppState>();
+                state.set_ble_service_checked(true);
             } else {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();

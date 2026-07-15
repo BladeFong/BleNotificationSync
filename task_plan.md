@@ -17,22 +17,32 @@ Phase 1
 - **Status:** complete
 
 ### Phase 2: 加密模块实现
-- [ ] 下载 LibTomCrypt 源码到 third_party/libtomcrypt/
-- [ ] Android 端集成 LibTomCrypt (JNI 源码编译)
+- [x] 下载 LibTomCrypt 源码到 third_party/libtomcrypt/
+- [x] Android 端集成 LibTomCrypt (JNI 源码编译)
 - [ ] Windows 端集成 LibTomCrypt (源码编译 + P/Invoke)
 - [ ] macOS 端集成 LibTomCrypt (源码编译 + Bridging Header)
-- [ ] 实现 AES-CCM 加解密
-- [ ] 实现密钥派生（HKDF-SHA256）
-- **Status:** pending
+- [x] 实现 AES-GCM 加解密（已改为 GCM 对齐桌面）
+- [x] 实现密钥派生（HKDF-SHA256，info="" 对齐桌面）
+- **Status:** Android 端 complete
 
 ### Phase 3: Android SDK (Kotlin)
-- [ ] 创建 Android 项目结构
-- [ ] 实现协议层（分片/重组/帧解析）
-- [ ] 实现加密层（AES-CCM 加解密）
-- [ ] 实现 BLE 通信层（GATT 连接/MTU 协商）
-- [ ] 实现扫码分层（解码层/相机层/UI 层）
-- [ ] 实现 SDK API（startPairing/setReminder/sendNotification）
-- [ ] 编写单元测试
+- [x] 创建 Android 项目结构
+- [x] 实现协议层（分片/重组/帧解析）
+- [x] 实现加密层（AES-GCM 加解密 + HKDF 密钥派生）
+- [x] 实现 BLE 通信层（GATT 连接/MTU 协商 + ACK 接收）
+- [x] 实现扫码分层（解码层/相机层/UI 层）
+- [x] 实现 SDK API（startPairing/setReminder/cancelReminder/sendNotification）
+- [x] 编写单元测试（54 纯 JVM 测试）
+- **Status:** complete
+
+### Phase 3.5: Android SDK API 改进（设计完成，实现中）
+- [ ] 配对持久化（SharedPreferences + baseKey 存储）
+- [ ] 权限内聚（BleClient.hasPermissions + 移除 @Suppress）
+- [ ] 结构化错误码（SdkError 密封类替换 String）
+- [ ] 生命周期管理（close()）
+- [ ] 连接复用（推迟）
+- 设计：`docs/superpowers/specs/2026-07-15-sdk-api-improvements-design.md`
+- 计划：`docs/superpowers/plans/2026-07-15-sdk-api-improvements.md`
 - **Status:** pending
 
 ### Phase 4: Windows 端 (C# .NET)

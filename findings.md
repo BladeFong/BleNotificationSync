@@ -42,10 +42,21 @@
 | novotnyllc/dotnet-artisan@dotnet-csharp | 287 | .NET/C# |
 | jcurbelo/skills@wpf-best-practices | 364 | WPF |
 
+## Technical Decisions (追加)
+| Decision | Rationale |
+|----------|-----------|
+| 密钥 = HKDF(package+random) | 配对时 Android 生成 32B 随机数，双方 HKDF(package+random)→baseKey 持久化。防止反编译包名推算密钥 |
+| baseKey 持久化 + nonce 每次生成 | 双层随机：配对级隔离 + 消息级隔离 |
+| AES-GCM（原设计） | 对齐桌面 Rust aes-gcm crate，替代原 CCM 实现 |
+| HKDF info="" | 对齐桌面 Rust pk.expand(b"") |
+| SdkError 密封类替换 String | 调用方可按类型分支处理 |
+| 连接复用推迟 | MVP 够用，等联调后评估 |
+
 ## Resources
 - 设计文档: `docs/superpowers/specs/2026-07-10-ble-notification-sync-design.md`
+- SDK 改进设计: `docs/superpowers/specs/2026-07-15-sdk-api-improvements-design.md`
+- SDK 改进计划: `docs/superpowers/plans/2026-07-15-sdk-api-improvements.md`
 - 原始方案: `docs/reference/original-scheme.md`
-- JustNow 项目参考: `/mnt/androiddev/StudioProjects/JustNow`
 
 ## Issues Encountered
 | Issue | Resolution |

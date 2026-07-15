@@ -1,5 +1,13 @@
 # Progress Log
 
+## Session: 2026-07-15 — SDK API 改进设计
+
+- **Status:** 设计完成，进入实现
+- 完成 SDK API 改进设计文档（`docs/superpowers/specs/2026-07-15-sdk-api-improvements-design.md`）
+- 完成实现计划（`docs/superpowers/plans/2026-07-15-sdk-api-improvements.md`）
+- 修正主设计文档密钥管理策略：配对时生成随机数 + HKDF(package+random) → baseKey 持久化
+- 5 项改进：配对持久化 / 权限内聚 / 结构化错误码 / 生命周期管理 / 连接复用推迟
+
 ## Session: 2026-07-10
 
 ### Phase 1: 协议规范 & 设计文档

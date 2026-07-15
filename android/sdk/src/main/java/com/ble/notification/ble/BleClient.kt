@@ -1,16 +1,21 @@
 package com.ble.notification.ble
 
+import android.Manifest
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import androidx.core.content.ContextCompat
 import com.ble.notification.qr.QrResult
+import com.ble.notification.sdk.SdkError
 import java.util.UUID
 
 interface ConnectionCallback {
     fun onReady(gatt: BluetoothGatt)
-    fun onError(error: String)
+    fun onError(error: SdkError)
 }
 
 object BleClient {
@@ -24,37 +29,57 @@ object BleClient {
 
     fun parseQrCode(url: String): QrResult? {
         if (url.isBlank()) return null
-
         val uri = try {
             Uri.parse(url)
         } catch (_: Exception) {
             return null
         }
-
         if (uri.scheme != QR_SCHEME || uri.host != QR_HOST) return null
-
         val mac = uri.getQueryParameter("mac") ?: return null
         val uuid = uri.getQueryParameter("uuid") ?: return null
-
         return QrResult(mac, uuid)
     }
 
-    @Suppress("MissingPermission")
+    fun hasPermissions(context: Context): Boolean {
+        return getMissingPermissions(context).isEmpty()
+    }
+
+    fun getMissingPermissions(context: Context): Array<String> {
+        val required = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            arrayOf(
+                Manifest.permission.BLUETOOTH,
+                Manifest.permission.BLUETOOTH_ADMIN,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            )
+        }
+        return required.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }.toTypedArray()
+    }
+
     fun connect(context: Context, mac: String, callback: ConnectionCallback) {
         val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
         if (bluetoothAdapter == null) {
-            callback.onError("Bluetooth not available")
+            callback.onError(SdkError.BluetoothUnavailable())
             return
         }
 
         if (!bluetoothAdapter.isEnabled) {
-            callback.onError("Bluetooth is disabled")
+            callback.onError(SdkError.BluetoothDisabled())
+            return
+        }
+
+        val missing = getMissingPermissions(context)
+        if (missing.isNotEmpty()) {
+            callback.onError(SdkError.PermissionDenied(missing.toList()))
             return
         }
 
         val device = bluetoothAdapter.getRemoteDevice(mac)
         if (device == null) {
-            callback.onError("Device not found for MAC: $mac")
+            callback.onError(SdkError.DeviceNotFound(mac))
             return
         }
 
@@ -67,7 +92,7 @@ object BleClient {
                     if (newState == BluetoothProfile.STATE_CONNECTED) {
                         gatt.discoverServices()
                     } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                        callback.onError("Disconnected with status: $status")
+                        callback.onError(SdkError.ConnectionFailed("status=$status"))
                         gatt.close()
                     }
                 }
@@ -76,7 +101,7 @@ object BleClient {
                     if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
                         gatt.requestMtu(TARGET_MTU)
                     } else {
-                        callback.onError("Service discovery failed with status: $status")
+                        callback.onError(SdkError.ConnectionFailed("service discovery: $status"))
                         gatt.close()
                     }
                 }
@@ -85,7 +110,7 @@ object BleClient {
                     if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
                         callback.onReady(gatt)
                     } else {
-                        callback.onError("MTU negotiation failed with status: $status")
+                        callback.onError(SdkError.ConnectionFailed("MTU negotiation: $status"))
                         gatt.close()
                     }
                 }

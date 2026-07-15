@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="s_app_name">BLE 通知同步测试</string>
+    <string name="s_scan_pair">扫描绑定</string>
+    <string name="s_unpair">解除绑定</string>
+    <string name="s_send_reminder">发送提醒 (10秒后)</string>
+    <string name="s_default_text">测试通知消息</string>
+</resources>

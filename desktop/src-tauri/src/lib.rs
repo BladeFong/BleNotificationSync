@@ -58,6 +58,7 @@ pub fn run() {
             storage::get_autostart,
             storage::set_silent_mode,
             storage::get_silent_mode,
+            update_ble_menu_state,
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -135,4 +136,11 @@ pub fn run() {
             api.prevent_exit();
         }
     });
+}
+
+/// Update BLE menu check state (called from frontend after state change)
+#[tauri::command]
+fn update_ble_menu_state(state: tauri::State<AppState>, is_running: bool) -> Result<(), String> {
+    state.set_ble_service_checked(is_running);
+    Ok(())
 }

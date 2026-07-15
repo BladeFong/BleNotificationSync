@@ -19,7 +19,7 @@ class FrameEncoderTest {
 
     @Test
     fun `encodeRegister has correct magic and type`() {
-        val frame = FrameEncoder.encodeRegister("JustNow", "com.nearby.justnow")
+        val frame = FrameEncoder.encodeRegister("JustNow", "com.nearby.justnow", ByteArray(32))
 
         assertEquals(MAGIC_BYTE_0, frame[0])
         assertEquals(MAGIC_BYTE_1, frame[1])
@@ -28,7 +28,7 @@ class FrameEncoderTest {
 
     @Test
     fun `encodeRegister single frame Seq=0 TotalSeq=1`() {
-        val frame = FrameEncoder.encodeRegister("JustNow", "com.nearby.justnow")
+        val frame = FrameEncoder.encodeRegister("JustNow", "com.nearby.justnow", ByteArray(32))
 
         assertEquals(0, frame[3].toInt() and 0xFF)
         assertEquals(1, frame[4].toInt() and 0xFF)
@@ -36,11 +36,12 @@ class FrameEncoderTest {
 
     @Test
     fun `encodeRegister payload is valid JSON`() {
-        val frame = FrameEncoder.encodeRegister("TestApp", "com.example.test")
+        val frame = FrameEncoder.encodeRegister("TestApp", "com.example.test", ByteArray(32))
         val payload = String(frame, HEADER_SIZE, frame.size - HEADER_SIZE, Charsets.UTF_8)
 
         assertTrue("payload should contain app_name", payload.contains("\"app_name\""))
         assertTrue("payload should contain package", payload.contains("\"package\""))
+        assertTrue("payload should contain random", payload.contains("\"random\""))
         assertTrue("payload should contain TestApp", payload.contains("TestApp"))
         assertTrue("payload should contain com.example.test", payload.contains("com.example.test"))
         assertTrue("payload should start with {", payload.startsWith("{"))
@@ -194,7 +195,7 @@ class FrameEncoderTest {
 
     @Test
     fun `all message types produce valid magic`() {
-        val register = FrameEncoder.encodeRegister("App", "com.test")
+        val register = FrameEncoder.encodeRegister("App", "com.test", ByteArray(32))
         val notify = FrameEncoder.encodeNotify("com.test", "T", "B", 0L)
         val iconData = FrameEncoder.encodeIconData(ByteArray(1), 0, 1)
         val iconEnd = FrameEncoder.encodeIconEnd(0)

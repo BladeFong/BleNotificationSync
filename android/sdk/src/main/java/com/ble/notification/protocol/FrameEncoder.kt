@@ -18,12 +18,15 @@ object FrameEncoder {
      *
      * @param appName display name of the app
      * @param packageName Android package name
+     * @param random random bytes for authentication challenge (32 bytes)
      * @return encoded frame bytes
      */
-    fun encodeRegister(appName: String, packageName: String): ByteArray {
+    fun encodeRegister(appName: String, packageName: String, random: ByteArray): ByteArray {
+        val randomB64 = android.util.Base64.encodeToString(random, android.util.Base64.NO_WRAP)
         val json = buildJson(
             "app_name" to jsonString(appName),
-            "package" to jsonString(packageName)
+            "package" to jsonString(packageName),
+            "random" to jsonString(randomB64)
         )
         return buildFrame(MessageType.REGISTER, 0, 1, json.toByteArray(Charsets.UTF_8))
     }

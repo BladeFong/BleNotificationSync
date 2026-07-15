@@ -56,6 +56,7 @@ pub fn run() {
 
             // Clone for event handler
             let ble_service_ref = ble_service_item.clone();
+            let ble_service_ref2 = ble_service_item.clone();
 
             let menu = Menu::with_items(app, &[
                 &show_item, &ble_service_item,
@@ -133,11 +134,12 @@ pub fn run() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.hide();
                 }
-                // Directly start BLE service
+                // Directly start BLE service and update menu check state
                 let state = app.state::<ble::BleState>();
                 let mut is_running = state.is_running.lock().unwrap();
                 if !*is_running {
                     *is_running = true;
+                    let _ = ble_service_ref2.set_checked(true);
                 }
             } else {
                 // Normal mode: show window

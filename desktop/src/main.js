@@ -139,12 +139,16 @@ listen('tray-action', async (event) => {
     }
 });
 
-// Listen for BLE status sync (when window shows)
+// Listen for BLE status sync (when window shows or service toggles)
 listen('ble-status-sync', (event) => {
+    const wasRunning = isRunning;
     isRunning = event.payload;
     updateUI();
-    if (isRunning) {
+    // Only add log if status actually changed
+    if (isRunning && !wasRunning) {
         addLog(isChinese ? 'GATT 服务已启动' : 'GATT server started');
+    } else if (!isRunning && wasRunning) {
+        addLog(isChinese ? 'GATT 服务已停止' : 'GATT server stopped');
     }
 });
 

@@ -107,6 +107,12 @@ pub fn run() {
                             let _ = storage::set_silent_mode(!current);
                         }
                         "quit" => {
+                            // Stop BLE service before exiting
+                            let state = app_handle.state::<ble::BleState>();
+                            let mut is_running = state.is_running.lock().unwrap();
+                            if *is_running {
+                                *is_running = false;
+                            }
                             std::process::exit(0);
                         }
                         _ => {}

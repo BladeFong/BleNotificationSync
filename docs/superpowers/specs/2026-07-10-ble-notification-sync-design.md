@@ -72,9 +72,14 @@
 ```json
 {
   "app_name": "JustNow",
-  "package": "com.nearby.justnow"
+  "package": "com.nearby.justnow",
+  "random": "<base64 编码的 32 字节随机数>"
 }
 ```
+
+- `app_name`：APP 显示名称（来自 SDK 调用参数）
+- `package`：Android 包名（来自 `context.packageName`）
+- `random`：Android 生成的 32 字节随机数，base64 编码。用于密钥派生，双方各自 `HKDF(package+random) → baseKey` 后持久化
 
 #### NOTIFY
 
@@ -139,21 +144,37 @@
 
 | 项目 | 说明 |
 |------|------|
-| 生成时机 | APP 绑定时 |
-| 生成方式 | 由包名 `package` 通过 KDF 派生，双方各自独立计算 |
-| 保存位置 | Android 端：APP 本地存储<br>PC/Mac 端：按 MAC 地址 + 包名管理 |
-| 密钥传递 | **不需要传输**，双方用相同算法和输入得到相同密钥 |
+| 生成时机 | APP 绑定配对时 |
+| 生成方式 | Android 生成 32 字节随机数，通过 REGISTER 帧发给桌面，双方各自 `HKDF(package+random) → baseKey` |
+| 保存位置 | Android 端：SharedPreferences 存 `baseKey`<br>PC/Mac 端：按 MAC + 包名管理 |
+| 随机数传递 | REGISTER 帧中明文携带，配对后丢弃 |
 
-**密钥派生算法**：
+**密钥派生算法**（两端实现必须一致）：
+
 ```
-key = HKDF-SHA256(
+// 配对时，一次性派生并持久化
+random = SecureRandom.nextBytes(32)          // Android 生成
+baseKey = HKDF-SHA256(
   salt = "BleNotificationSync",
-  info = package_name,
-  length = 32
+  IKM  = packageName + random,               // 拼接包名和随机数
+  info = "" (零长字节),
+  L    = 32
 )
+// baseKey(32B) 持久化存储
 ```
 
-**说明**：双方用相同的包名和固定盐值，通过 HKDF 派生出相同的 32 字节 AES 密钥。无需传输密钥，安全性更高。
+**每次消息加密**（配对完成后不再派生新密钥）：
+
+```
+nonce = SecureRandom.nextBytes(12)          // 每次消息独立生成
+ciphertext = AES-256-GCM-Encrypt(baseKey, nonce, plaintext)
+发送: [Package(明文) | nonce(明文) | ciphertext]
+```
+
+**安全性**：
+- 不同 pairing 的 random 不同 → baseKey 不同（防止反编译包名推算）
+- 同一 baseKey 下每次消息 nonce 不同 → 密文不同（防重放攻击）
+- 双层随机：配对级隔离 + 消息级隔离
 
 ### 2.5.3 通知加密流程
 
@@ -205,22 +226,23 @@ key = HKDF-SHA256(
 ### 2.5.5 绑定流程（加密版）
 
 ```
-Android                                    PC/Mac
-   |                                          |
-   | 1. REGISTER (明文: app_name, package)    |
-   | -------------------------------------->  |
-   |                                          | 2. 派生密钥: HKDF(package)
-   |                                          | 3. 存储: MAC + package → key
-   | 4. ACK (明文: {code: 0})                 |
-   | <--------------------------------------  |
-   | 5. 派生密钥: HKDF(package)               |
-   | 6. 保存密钥到本地                        |
-   |                                          |
-   | 7. 后续通知加密传输                      |
-   | ======================================>  |
+Android                                       PC/Mac
+   |                                             |
+   | 1. 生成 32B 随机数 random                   |
+   | 2. REGISTER({app_name, package, random})    |
+   | ----------------------------------------->  |
+   |                                             | 3. baseKey = HKDF(package + random)
+   |                                             | 4. 存储: MAC→(package, app_name, baseKey)
+   | 5. ACK({code: 0})                          |
+   | <-----------------------------------------  |
+   | 6. baseKey = HKDF(package + random)         |
+   | 7. 存储: package→(MAC, appName, baseKey)    |
+   |                                             |
+   | 8. 后续通知 AES-256-GCM(baseKey, nonce, pt) |
+   | ==========================================>  |
 ```
 
-**安全优势**：双方各自独立派生密钥，无需传输密钥，安全性更高。
+**关键**：配对后双方持久化同一个 `baseKey`，后续消息直接用，不再每次派生。
 
 ### 2.5.6 安全考虑
 

@@ -3,6 +3,7 @@ mod crypto;
 mod protocol;
 mod storage;
 
+use std::sync::Arc;
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem},
     tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState},
@@ -13,7 +14,6 @@ use tauri::{
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // If app is already running, show the window
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.unminimize();
@@ -37,7 +37,6 @@ pub fn run() {
             storage::get_silent_mode,
         ])
         .on_window_event(|window, event| {
-            // When close is requested, hide the window instead of destroying it
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let _ = window.hide();
                 api.prevent_close();
@@ -47,14 +46,16 @@ pub fn run() {
             // Check settings
             let silent_enabled = storage::get_silent_mode().unwrap_or(false);
             let autostart_enabled = storage::get_autostart().unwrap_or(false);
-            let ble_running = false; // Default to false, will be synced when window shows
 
             // Create menu items
             let show_item = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
-            let ble_service_item = CheckMenuItem::with_id(app, "ble_service", "启动服务", true, ble_running, None::<&str>)?;
+            let ble_service_item = CheckMenuItem::with_id(app, "ble_service", "启动服务", true, false, None::<&str>)?;
             let auto_start_item = CheckMenuItem::with_id(app, "autostart", "开机自启动", true, autostart_enabled, None::<&str>)?;
             let silent_item = CheckMenuItem::with_id(app, "silent", "静默启动服务", true, silent_enabled, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+
+            // Clone for event handler
+            let ble_service_ref = ble_service_item.clone();
 
             let menu = Menu::with_items(app, &[
                 &show_item, &ble_service_item,
@@ -67,7 +68,7 @@ pub fn run() {
                 .icon(app.default_window_icon().cloned().unwrap())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app_handle: &tauri::AppHandle, event| {
+                .on_menu_event(move |app_handle: &tauri::AppHandle, event| {
                     let id = event.id().0.as_str();
 
                     match id {
@@ -87,13 +88,13 @@ pub fn run() {
                             let state = app_handle.state::<ble::BleState>();
                             let mut is_running = state.is_running.lock().unwrap();
                             if *is_running {
-                                // Stop
                                 *is_running = false;
                                 let _ = app_handle.emit("ble-status-sync", false);
+                                let _ = ble_service_ref.set_checked(false);
                             } else {
-                                // Start
                                 *is_running = true;
                                 let _ = app_handle.emit("ble-status-sync", true);
+                                let _ = ble_service_ref.set_checked(true);
                             }
                         }
                         "autostart" => {
@@ -101,7 +102,6 @@ pub fn run() {
                             let _ = storage::set_autostart(!current);
                         }
                         "silent" => {
-                            // Just toggle the setting, don't hide window now
                             let current = storage::get_silent_mode().unwrap_or(false);
                             let _ = storage::set_silent_mode(!current);
                         }
@@ -133,7 +133,7 @@ pub fn run() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.hide();
                 }
-                // Directly start BLE service (not via event, since window may be hidden)
+                // Directly start BLE service
                 let state = app.state::<ble::BleState>();
                 let mut is_running = state.is_running.lock().unwrap();
                 if !*is_running {

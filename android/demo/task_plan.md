@@ -15,7 +15,7 @@
 - [x] Task 5: Layout activity_main.xml
 - [x] Task 6: MainActivity.kt
 - [x] Task 7: 全量编译验证
-- **Status:** pending
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |

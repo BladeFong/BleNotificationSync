@@ -1,50 +1,72 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center_horizontal"
-    android:orientation="vertical"
-    android:padding="24dp">
+    android:orientation="vertical">
 
-    <Space
+    <androidx.appcompat.widget.Toolbar
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="48dp" />
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorPrimary"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+        app:titleTextColor="@android:color/white" />
 
-    <Button
-        android:id="@+id/btn_scan_pair"
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/s_scan_pair" />
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
 
-    <Space
-        android:layout_width="match_parent"
-        android:layout_height="12dp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:padding="24dp">
 
-    <Button
-        android:id="@+id/btn_unpair"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/s_unpair" />
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="48dp" />
 
-    <Space
-        android:layout_width="match_parent"
-        android:layout_height="24dp" />
+            <Button
+                android:id="@+id/btn_scan_pair"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/s_scan_pair" />
 
-    <EditText
-        android:id="@+id/et_message"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="@string/s_default_text"
-        android:inputType="text" />
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="12dp" />
 
-    <Space
-        android:layout_width="match_parent"
-        android:layout_height="24dp" />
+            <Button
+                android:id="@+id/btn_unpair"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/s_unpair" />
 
-    <Button
-        android:id="@+id/btn_send"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/s_send_reminder" />
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="24dp" />
 
+            <EditText
+                android:id="@+id/et_message"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/s_default_text"
+                android:inputType="text" />
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="24dp" />
+
+            <Button
+                android:id="@+id/btn_send"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/s_send_reminder" />
+
+        </LinearLayout>
+    </ScrollView>
 </LinearLayout>

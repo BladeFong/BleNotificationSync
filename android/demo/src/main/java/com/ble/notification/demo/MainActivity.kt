@@ -4,7 +4,11 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.ble.notification.pairing.PairingCallback
 import com.ble.notification.sdk.BleNotificationSDK
 import com.ble.notification.sdk.ReminderCallback
@@ -13,14 +17,26 @@ import com.ble.notification.sdk.SdkError
 class MainActivity : AppCompatActivity() {
 
     private lateinit var sdk: BleNotificationSDK
+    private lateinit var toolbar: Toolbar
     private lateinit var btnScanPair: Button
     private lateinit var btnUnpair: Button
     private lateinit var etMessage: EditText
     private lateinit var btnSend: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        toolbar = findViewById(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.title = getString(R.string.s_app_name)
+
+        ViewCompat.setOnApplyWindowInsetsListener(toolbar) { v, insets ->
+            val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            v.setPadding(v.paddingLeft, top, v.paddingRight, v.paddingBottom)
+            insets
+        }
 
         sdk = BleNotificationSDK.init(this)
 

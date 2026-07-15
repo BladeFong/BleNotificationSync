@@ -32,3 +32,9 @@
 ### 额外补充
 - SDK 补全：ReminderScheduler + AlarmReceiver + setReminder/cancelReminder + ReminderCallback（之前被 revert 丢失）
 - SDK Manifest 补全：BLE 权限 + POST_NOTIFICATIONS + AlarmReceiver 注册
+- SDK 补全：QrScanner/QrScannerFragment CameraX 实现（之前被 revert）+ SDK res 资源文件
+
+### 真机验证调试
+- ActionBar 兼容 edge-to-edge：NoActionBar + FrameLayout 外层容器 + inset padding + enableEdgeToEdge，标题正常显示
+- 扫码：CameraX + ML Kit 二维码扫描正常
+- 编译：BUILD SUCCESSFUL（:sdk + :demo）

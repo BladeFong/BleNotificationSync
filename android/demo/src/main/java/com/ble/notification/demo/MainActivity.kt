@@ -28,15 +28,16 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        toolbar = findViewById(R.id.toolbar)
-        setSupportActionBar(toolbar)
-        supportActionBar?.setTitle(R.string.s_app_name)
-
-        ViewCompat.setOnApplyWindowInsetsListener(toolbar) { v, insets ->
+        val appBar = findViewById<android.view.ViewGroup>(R.id.app_bar)
+        ViewCompat.setOnApplyWindowInsetsListener(appBar) { v, insets ->
             val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             v.setPadding(v.paddingLeft, top, v.paddingRight, v.paddingBottom)
             insets
         }
+
+        toolbar = findViewById(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.setTitle(R.string.s_app_name)
 
         sdk = BleNotificationSDK.init(this)
 

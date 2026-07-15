@@ -208,7 +208,7 @@ class FrameEncoderTest {
 
     @Test
     fun `all message types have 5-byte header minimum`() {
-        val register = FrameEncoder.encodeRegister("A", "com.x")
+        val register = FrameEncoder.encodeRegister("A", "com.x", ByteArray(32))
         val notify = FrameEncoder.encodeNotify("com.x", "T", "B", 0L)
         val iconData = FrameEncoder.encodeIconData(ByteArray(1), 0, 1)
         val iconEnd = FrameEncoder.encodeIconEnd(0)

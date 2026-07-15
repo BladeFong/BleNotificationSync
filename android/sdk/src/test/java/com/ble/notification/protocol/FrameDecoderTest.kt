@@ -16,7 +16,7 @@ class FrameDecoderTest {
 
     @Test
     fun `decode REGISTER frame`() {
-        val encoded = FrameEncoder.encodeRegister("JustNow", "com.nearby.justnow")
+        val encoded = FrameEncoder.encodeRegister("JustNow", "com.nearby.justnow", ByteArray(32))
 
         val frame = FrameDecoder.decode(encoded)
 

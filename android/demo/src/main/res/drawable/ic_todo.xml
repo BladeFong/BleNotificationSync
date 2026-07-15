@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 圆角方框 -->
+    <path
+        android:fillColor="@color/icon_foreground"
+        android:pathData="M6,2 L18,2 C20.2,2 22,3.8 22,6 L22,18 C22,20.2 20.2,22 18,22 L6,22 C3.8,22 2,20.2 2,18 L2,6 C2,3.8 3.8,2 6,2 Z" />
+
+    <!-- 勾选标记 -->
+    <path
+        android:fillColor="@color/icon_background"
+        android:pathData="M10,16.5 L6.5,13 L5,14.5 L10,19.5 L19,7 L17.5,5.5 Z" />
+</vector>

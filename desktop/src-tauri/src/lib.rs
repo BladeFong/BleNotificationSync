@@ -144,6 +144,15 @@ pub fn run() {
 /// Update BLE menu check state (called from frontend after state change)
 #[tauri::command]
 fn update_ble_menu_state(state: tauri::State<AppState>, is_running: bool) -> Result<(), String> {
-    state.set_ble_service_checked(is_running);
+    eprintln!("[DEBUG] update_ble_menu_state called with is_running={}", is_running);
+    let item = state.ble_service_item.lock().unwrap();
+    eprintln!("[DEBUG] ble_service_item is_some={}", item.is_some());
+    if let Some(item) = &*item {
+        eprintln!("[DEBUG] Calling set_checked({})", is_running);
+        let _ = item.set_checked(is_running);
+        eprintln!("[DEBUG] set_checked called successfully");
+    } else {
+        eprintln!("[DEBUG] ble_service_item is None!");
+    }
     Ok(())
 }

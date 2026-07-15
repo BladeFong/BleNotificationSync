@@ -40,6 +40,7 @@ async function startServer() {
         await invoke('start_gatt_server');
         isRunning = true;
         updateUI();
+        invoke('update_ble_menu_state', { isRunning: true });
         addLog(isChinese ? 'GATT 服务已启动' : 'GATT server started');
     } catch (error) {
         addLog(`${isChinese ? '启动失败' : 'Start failed'}: ${error}`);
@@ -53,6 +54,7 @@ async function stopServer() {
         await invoke('stop_gatt_server');
         isRunning = false;
         updateUI();
+        invoke('update_ble_menu_state', { isRunning: false });
         addLog(isChinese ? 'GATT 服务已停止' : 'GATT server stopped');
     } catch (error) {
         addLog(`${isChinese ? '停止失败' : 'Stop failed'}: ${error}`);

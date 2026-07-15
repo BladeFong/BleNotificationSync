@@ -18,10 +18,17 @@ interface SendCallback {
     fun onError(error: SdkError)
 }
 
+interface ReminderCallback {
+    fun onScheduled(taskId: String)
+    fun onTriggered(taskId: String)
+    fun onSynced(taskId: String, success: Boolean)
+}
+
 class BleNotificationSDK private constructor(private val context: Context) {
 
     private val pairingManager = PairingManager(context)
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val reminderCallbacks = mutableMapOf<String, ReminderCallback>()
     @Volatile private var closed = false
 
     companion object {
@@ -31,6 +38,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
         fun init(context: Context): BleNotificationSDK {
             return instance ?: synchronized(this) {
                 instance ?: BleNotificationSDK(context.applicationContext).also { instance = it }
+                    .also { AlarmReceiver.createNotificationChannel(context.applicationContext) }
             }
         }
 
@@ -115,6 +123,32 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 callback?.onError(error)
             }
         })
+    }
+
+    fun setReminder(
+        taskId: String,
+        title: String,
+        body: String,
+        triggerAt: Long,
+        callback: ReminderCallback? = null
+    ) {
+        if (closed) return
+        if (callback != null) {
+            reminderCallbacks[taskId] = callback
+        }
+        ReminderScheduler.schedule(context, taskId, title, body, triggerAt)
+        callback?.onScheduled(taskId)
+    }
+
+    fun cancelReminder(taskId: String) {
+        ReminderScheduler.cancel(context, taskId)
+        reminderCallbacks.remove(taskId)
+    }
+
+    internal fun notifySynced(taskId: String, success: Boolean) {
+        val callback = reminderCallbacks.remove(taskId)
+        callback?.onTriggered(taskId)
+        callback?.onSynced(taskId, success)
     }
 
     fun close() {

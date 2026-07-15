@@ -34,15 +34,15 @@ android {
 }
 
 dependencies {
-    // CameraX (commented out until online build available)
-    // val cameraxVersion = "1.4.1"
-    // implementation("androidx.camera:camera-core:$cameraxVersion")
-    // implementation("androidx.camera:camera-camera2:$cameraxVersion")
-    // implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
-    // implementation("androidx.camera:camera-view:$cameraxVersion")
+    // CameraX
+    val cameraxVersion = "1.4.1"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
 
-    // ML Kit barcode scanning (commented out until online build available)
-    // implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    // ML Kit barcode scanning
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // AndroidX core
     implementation("androidx.core:core-ktx:1.15.0")

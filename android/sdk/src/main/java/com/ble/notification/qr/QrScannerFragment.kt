@@ -3,6 +3,7 @@ package com.ble.notification.qr
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -10,66 +11,58 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import com.ble.notification.sdk.R
 
-/**
- * QR Scanner Fragment - UI layer.
- *
- * Requires CameraX and ML Kit dependencies to be enabled.
- * Currently a placeholder until dependencies are available in offline build.
- */
 class QrScannerFragment : Fragment() {
 
     private var onResult: ((QrResult?) -> Unit)? = null
-    private lateinit var hintTextView: TextView
+    private var scanner: QrScanner? = null
+    private var previewView: PreviewView? = null
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
-            // TODO: Start camera scanning when CameraX is available
-            onResult?.invoke(null)
-        } else {
-            onResult?.invoke(null)
-        }
+        if (granted) startScanning() else onResult?.invoke(null)
     }
 
     companion object {
         fun newInstance(onResult: (QrResult?) -> Unit): QrScannerFragment {
-            return QrScannerFragment().apply {
-                this.onResult = onResult
-            }
+            return QrScannerFragment().apply { this.onResult = onResult }
         }
     }
 
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
-        val root = FrameLayout(requireContext()).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        val context = requireContext()
+
+        val root = FrameLayout(context).apply {
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
 
-        hintTextView = TextView(requireContext()).apply {
-            text = "Scan QR code to pair"
+        val pv = PreviewView(context).apply {
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+        }
+        previewView = pv
+        root.addView(pv)
+
+        val hint = TextView(context).apply {
+            text = getString(R.string.s_qr_scan_hint)
             setTextColor(0xFFFFFFFF.toInt())
-            textSize = 16f
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.text_size_caption))
             setShadowLayer(4f, 0f, 0f, 0xFF000000.toInt())
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
                 bottomMargin = 100
             }
         }
-        root.addView(hintTextView)
+        root.addView(hint)
 
+        scanner = QrScanner(requireActivity(), this)
         return root
     }
 
@@ -79,21 +72,26 @@ class QrScannerFragment : Fragment() {
     }
 
     private fun checkCameraPermission() {
-        when {
-            ContextCompat.checkSelfPermission(
-                requireContext(),
-                Manifest.permission.CAMERA
-            ) == PackageManager.PERMISSION_GRANTED -> {
-                // TODO: Start camera scanning when CameraX is available
-                onResult?.invoke(null)
-            }
-            else -> {
-                requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+        if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            startScanning()
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun startScanning() {
+        previewView?.let { pv ->
+            scanner?.start(pv) { result ->
+                onResult?.invoke(result)
+                parentFragmentManager.beginTransaction().remove(this).commitAllowingStateLoss()
             }
         }
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
+        scanner?.stop()
+        scanner = null
+        previewView = null
     }
 }

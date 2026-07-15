@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="s_qr_scan_hint">Scan QR code to pair</string>
+</resources>

@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "BleNotificationSync"
 include(":sdk")
+include(":demo")

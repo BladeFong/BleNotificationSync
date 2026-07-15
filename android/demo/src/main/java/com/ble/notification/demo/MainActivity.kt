@@ -30,7 +30,7 @@ class MainActivity : AppCompatActivity() {
 
         toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
-        supportActionBar?.title = getString(R.string.s_app_name)
+        supportActionBar?.setTitle(R.string.s_app_name)
 
         ViewCompat.setOnApplyWindowInsetsListener(toolbar) { v, insets ->
             val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top

@@ -57,7 +57,7 @@ stopBtn.addEventListener('click', stopServer);
 
 // Pair device - show dialog with QR code
 pairBtn.addEventListener('click', () => {
-    const uuid = '0000A1B2-0000-1000-8000-00805F9B34FB';
+    const uuid = '9e1d51a4-9c86-4447-9759-f6222b0f4b36';
     const dialog = document.createElement('div');
     dialog.id = 'pairDialog';
     dialog.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;';

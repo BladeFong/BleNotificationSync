@@ -20,8 +20,8 @@ object BleClient {
 
     private const val TARGET_MTU = 247
 
-    val SERVICE_UUID: UUID = UUID.fromString("0000A1B2-0000-1000-8000-00805F9B34FB")
-    val WRITE_CHARACTERISTIC_UUID: UUID = UUID.fromString("0000C3D4-0000-1000-8000-00805F9B34FB")
+    val SERVICE_UUID: UUID = UUID.fromString("9e1d51a4-9c86-4447-9759-f6222b0f4b36")
+    val WRITE_CHARACTERISTIC_UUID: UUID = UUID.fromString("f4788cde-8025-4c07-b352-87db1b272fdf")
 
     fun hasPermissions(context: Context): Boolean {
         return getMissingPermissions(context).isEmpty()
@@ -74,7 +74,7 @@ object BleClient {
         }
 
         val scanFilter = android.bluetooth.le.ScanFilter.Builder()
-            .setDeviceAddress(mac)
+            .setServiceUuid(android.os.ParcelUuid(SERVICE_UUID))
             .build()
         val scanSettings = android.bluetooth.le.ScanSettings.Builder()
             .setScanMode(android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_LATENCY)

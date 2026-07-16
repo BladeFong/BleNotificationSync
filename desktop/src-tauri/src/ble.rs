@@ -12,9 +12,9 @@ use uuid::Uuid;
 
 use crate::{config, crypto, protocol, storage};
 
-const SERVICE_UUID: &str = "0000A1B2-0000-1000-8000-00805F9B34FB";
-const CHAR_WRITE_UUID: &str = "0000C3D4-0000-1000-8000-00805F9B34FB";
-const CHAR_NOTIFY_UUID: &str = "0000D5E6-0000-1000-8000-00805F9B34FB";
+const SERVICE_UUID: &str = "9e1d51a4-9c86-4447-9759-f6222b0f4b36";
+const CHAR_WRITE_UUID: &str = "f4788cde-8025-4c07-b352-87db1b272fdf";
+const CHAR_NOTIFY_UUID: &str = "e7f22370-d86b-4e1a-8289-8d77bfb534ee";
 
 pub struct BleState {
     pub is_running: StdMutex<bool>,
@@ -282,7 +282,10 @@ async fn run_peripheral_task(
         characteristics: vec![characteristic],
     };
 
-    let _ = peripheral.add_service(&service).await;
+    peripheral
+        .add_service(&service)
+        .await
+        .map_err(|e| format!("Add service failed: {:?}", e))?;
     let _ = app_handle.emit("log-message", "BLE: GATT 服务与特征值创建成功");
 
     // 4. 启动广播
@@ -290,7 +293,8 @@ async fn run_peripheral_task(
         .start_advertising("BleSyncPC", &[srv_uuid])
         .await
         .map_err(|e| format!("Start advertising failed: {:?}", e))?;
-    let _ = app_handle.emit("log-message", "BLE: 广播已开启");
+    let is_adv = peripheral.is_advertising().await.unwrap_or(false);
+    let _ = app_handle.emit("log-message", format!("BLE: 广播已开启，当前实际广播状态：{}", if is_adv { "广播中" } else { "未广播/异常" }));
 
     // 5. 监听事件
     tokio::select! {

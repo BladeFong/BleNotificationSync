@@ -1,6 +1,6 @@
 package com.ble.notification.protocol
 
-import com.ble.notification.crypto.AesCcmCrypto
+import com.ble.notification.crypto.AesGcmCrypto
 
 /**
  * Encodes BLE notification frames according to the protocol spec.
@@ -32,7 +32,7 @@ object FrameEncoder {
     }
 
     /**
-     * Encode a NOTIFY frame with AES-CCM encryption.
+     * Encode a NOTIFY frame with AES-GCM encryption.
      *
      * Frame: Header(5) + PackageLen(1) + Package(var) + Nonce(12) + Ciphertext(var)
      *
@@ -53,7 +53,7 @@ object FrameEncoder {
             "body" to jsonString(body),
             "timestamp" to timestamp.toString()
         )
-        val encrypted = AesCcmCrypto.encrypt(
+        val encrypted = AesGcmCrypto.encrypt(
             packageName,
             plaintext.toByteArray(Charsets.UTF_8)
         )

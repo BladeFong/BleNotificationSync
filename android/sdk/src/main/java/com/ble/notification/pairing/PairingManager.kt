@@ -31,8 +31,15 @@ class PairingManager(private val context: Context) {
         private set
 
     private val prefs by lazy {
-        context.applicationContext.getSharedPreferences(
-            "ble_notification_pairings", Context.MODE_PRIVATE
+        val masterKey = androidx.security.crypto.MasterKey.Builder(context.applicationContext)
+            .setKeyScheme(androidx.security.crypto.MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        androidx.security.crypto.EncryptedSharedPreferences.create(
+            context.applicationContext,
+            "ble_notification_pairings",
+            masterKey,
+            androidx.security.crypto.EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            androidx.security.crypto.EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
     }
 

@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothGatt
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentActivity
 import com.ble.notification.ble.BleClient
 import com.ble.notification.ble.ConnectionCallback
@@ -35,6 +36,8 @@ class BleNotificationSDK private constructor(private val context: Context) {
         @Volatile
         private var instance: BleNotificationSDK? = null
 
+        private const val REQUEST_CODE_BLE_PERMISSIONS = 0x7100_0001
+
         fun init(context: Context): BleNotificationSDK {
             return instance ?: synchronized(this) {
                 instance ?: BleNotificationSDK(context.applicationContext).also { instance = it }
@@ -52,6 +55,14 @@ class BleNotificationSDK private constructor(private val context: Context) {
     fun startPairing(activity: FragmentActivity, appName: String, callback: PairingCallback) {
         if (checkClosed(callback)) return
         val packageName = context.packageName
+
+        // Check BLE permissions before opening scanner
+        val missing = BleClient.getMissingPermissions(context)
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(activity, missing, REQUEST_CODE_BLE_PERMISSIONS)
+            callback.onError(SdkError.PermissionDenied(missing.toList()))
+            return
+        }
 
         val fragment = QrScannerFragment.newInstance { qrResult ->
             if (qrResult == null) {

@@ -3,12 +3,12 @@ package com.ble.notification.crypto
 import java.security.SecureRandom
 
 /**
- * High-level AES-CCM encryption service for BLE notification payloads.
+ * High-level AES-GCM encryption service for BLE notification payloads.
  *
  * Each package name gets a unique derived key via [KeyDerivation] and
  * encryption uses a random 12-byte nonce per call.
  */
-object AesCcmCrypto {
+object AesGcmCrypto {
 
     private const val NONCE_SIZE = 12
 
@@ -30,7 +30,7 @@ object AesCcmCrypto {
     }
 
     /**
-     * Encrypt a plaintext using a package-specific AES-CCM key.
+     * Encrypt a plaintext using a package-specific AES-GCM key.
      *
      * @param packageName the application package name (used for key derivation)
      * @param plaintext   the data to encrypt
@@ -40,13 +40,13 @@ object AesCcmCrypto {
     fun encrypt(packageName: String, plaintext: ByteArray): EncryptedPayload {
         val key = KeyDerivation.deriveKey(packageName)
         val nonce = generateNonce()
-        val ciphertext = NativeCrypto.aesCcmEncrypt(key, nonce, plaintext)
-            ?: throw IllegalStateException("AES-CCM encryption failed for package: $packageName")
+        val ciphertext = NativeCrypto.aesGcmEncrypt(key, nonce, plaintext)
+            ?: throw IllegalStateException("AES-GCM encryption failed for package: $packageName")
         return EncryptedPayload(nonce, ciphertext)
     }
 
     /**
-     * Decrypt a ciphertext using a package-specific AES-CCM key.
+     * Decrypt a ciphertext using a package-specific AES-GCM key.
      *
      * @param packageName the application package name (used for key derivation)
      * @param nonce       the 12-byte nonce used during encryption
@@ -56,7 +56,7 @@ object AesCcmCrypto {
     fun decrypt(packageName: String, nonce: ByteArray, ciphertext: ByteArray): ByteArray? {
         require(nonce.size == NONCE_SIZE) { "Nonce must be $NONCE_SIZE bytes, got ${nonce.size}" }
         val key = KeyDerivation.deriveKey(packageName)
-        return NativeCrypto.aesCcmDecrypt(key, nonce, ciphertext)
+        return NativeCrypto.aesGcmDecrypt(key, nonce, ciphertext)
     }
 
     private fun generateNonce(): ByteArray {

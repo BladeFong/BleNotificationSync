@@ -1,6 +1,6 @@
 package com.ble.notification.protocol
 
-import com.ble.notification.crypto.AesCcmCrypto
+import com.ble.notification.crypto.AesGcmCrypto
 
 data class Frame(
     val type: MessageType,
@@ -62,6 +62,6 @@ object FrameDecoder {
         val nonce = data.sliceArray(nonceOffset until nonceOffset + NONCE_SIZE)
         val ciphertext = data.sliceArray(nonceOffset + NONCE_SIZE until data.size)
 
-        return AesCcmCrypto.decrypt(packageName, nonce, ciphertext)
+        return AesGcmCrypto.decrypt(packageName, nonce, ciphertext)
     }
 }

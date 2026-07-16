@@ -6,10 +6,8 @@ import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import androidx.core.content.ContextCompat
-import com.ble.notification.qr.QrResult
 import com.ble.notification.sdk.SdkError
 import java.util.UUID
 
@@ -20,25 +18,10 @@ interface ConnectionCallback {
 
 object BleClient {
 
-    private const val QR_SCHEME = "ble"
-    private const val QR_HOST = "pair"
     private const val TARGET_MTU = 247
 
     val SERVICE_UUID: UUID = UUID.fromString("0000A1B2-0000-1000-8000-00805F9B34FB")
     val WRITE_CHARACTERISTIC_UUID: UUID = UUID.fromString("0000C3D4-0000-1000-8000-00805F9B34FB")
-
-    fun parseQrCode(url: String): QrResult? {
-        if (url.isBlank()) return null
-        val uri = try {
-            Uri.parse(url)
-        } catch (_: Exception) {
-            return null
-        }
-        if (uri.scheme != QR_SCHEME || uri.host != QR_HOST) return null
-        val mac = uri.getQueryParameter("mac") ?: return null
-        val uuid = uri.getQueryParameter("uuid") ?: return null
-        return QrResult(mac, uuid)
-    }
 
     fun hasPermissions(context: Context): Boolean {
         return getMissingPermissions(context).isEmpty()

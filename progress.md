@@ -1,5 +1,14 @@
 # Progress Log
 
+## Session: 2026-07-16 — 跨平台 BLE 外设重构
+
+- **Status:** 跨平台 BLE 外设实现完成并编译通过
+- 分析并定位 Windows 平台下自定义广播 `BluetoothLEAdvertisementPublisher` 导致 `E_INVALIDARG` (0x80070057) 报错的原因，认定其与 `GattServiceProvider` 存在广播冲突。
+- 物理删除平台专属的 `ble_winrt.rs` 文件，清理了 `lib.rs` 中的 Windows 条件编译和模块声明。
+- 在 `ble.rs` 中使用 `ble-peripheral-rust` 库重构实现统一的外设与 GATT 服务。
+- 在 `ble.rs` 中重构了 `get_ble_mac()`，为 Windows（PowerShell 脚本）和 macOS（`system_profiler`）提供了通用的物理 MAC 地址获取逻辑。
+- 在 `BleState` 中引入 `shutdown_tx` 单发通道，在 `stop_service` 时发送信号终止后台轮询任务，支持释放 BLE 外设资源，避免生命周期泄漏。
+
 ## Session: 2026-07-15 — Tauri 桌面端迁移
 
 - **Status:** 核心框架就绪，BLE 和通知待实现

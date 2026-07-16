@@ -53,10 +53,10 @@ Phase 4
 - [x] 实现配对存储（内存 + Windows 注册表设置持久化）
 - [x] 实现事件处理（托盘菜单分发）
 - [x] 前端 UI（中英双语、状态显示、日志控制台、扫码绑定）
-- [ ] 实现 BLE GATT Server（btleplug，当前占位）
+- [x] 实现 BLE GATT Server（基于 ble-peripheral-rust 跨平台方案）
 - [ ] 实现通知适配层（Toast/系统通知）
-- [ ] 实现 macOS/Linux 兼容层
-- **Status:** 进行中（核心框架就绪，BLE 和通知待实现）
+- [x] 实现 macOS BLE 兼容层（基于 ble-peripheral-rust 实现 macOS 下的广播与服务）
+- **Status:** 进行中（BLE 服务重构就绪，系统通知适配待实现）
 - **原代码：** `../windows/` 为旧 C# .NET WinForms 实现，已废弃
 
 ### Phase 5: 联调测试

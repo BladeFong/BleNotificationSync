@@ -152,9 +152,50 @@ fn sync_to_config(state: &storage::StorageState) {
 
 fn get_ble_mac() -> String {
     #[cfg(target_os = "windows")]
-    { return crate::ble_winrt::get_ble_mac(); }
-    #[cfg(not(target_os = "windows"))]
-    { "00:00:00:00:00:00".to_string() }
+    {
+        use std::os::windows::process::CommandExt;
+        const NO_WINDOW: u32 = 0x08000000;
+        let commands = [
+            r#"$a=Get-CimInstance Win32_NetworkAdapter|?{$_.Name-like'*Bluetooth*'-or$_.ProductName-like'*Bluetooth*'};if($a){$a[0].MACAddress}"#,
+            r#"$r=ls 'HKLM:\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Radios' -EA 0;if($r){$v=$r[0].GetValue('Address');if($v-is[array]){($v|%{$_.ToString('X2')})-join':'}}"#,
+            r#"(Get-NetAdapter|?{$_.InterfaceDescription-like'*Bluetooth*'}).MacAddress"#,
+        ];
+        for cmd in commands {
+            if let Ok(output) = std::process::Command::new("powershell")
+                .args(&["-NoProfile", "-Command", cmd])
+                .creation_flags(NO_WINDOW)
+                .output()
+            {
+                let s = String::from_utf8_lossy(&output.stdout).trim().to_uppercase().replace('-', ":");
+                if !s.is_empty() && s.contains(':') {
+                    return s;
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(output) = std::process::Command::new("system_profiler")
+            .arg("SPBluetoothDataType")
+            .output()
+        {
+            let s = String::from_utf8_lossy(&output.stdout);
+            for line in s.lines() {
+                if line.contains("Address:") {
+                    let parts: Vec<&str> = line.split("Address:").collect();
+                    if parts.len() > 1 {
+                        let mac = parts[1].trim().to_uppercase().replace('-', ":");
+                        if !mac.is_empty() {
+                            return mac;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    "00:00:00:00:00:00".to_string()
 }
 
 // ── 公共入口 ──

@@ -66,6 +66,69 @@ object BleClient {
             return
         }
 
+        // 先发起一轮 BLE 扫描以刷新系统的蓝牙缓存，解析设备地址类型（Public vs Random）
+        val scanner = bluetoothAdapter.bluetoothLeScanner
+        if (scanner == null) {
+            connectDirectly(device, context, callback)
+            return
+        }
+
+        val scanFilter = android.bluetooth.le.ScanFilter.Builder()
+            .setDeviceAddress(mac)
+            .build()
+        val scanSettings = android.bluetooth.le.ScanSettings.Builder()
+            .setScanMode(android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val scanCallback = object : android.bluetooth.le.ScanCallback() {
+            var isFinished = false
+
+            override fun onScanResult(callbackType: Int, result: android.bluetooth.le.ScanResult) {
+                if (isFinished) return
+                isFinished = true
+                try {
+                    scanner.stopScan(this)
+                } catch (e: SecurityException) {
+                    // Ignore
+                }
+                connectDirectly(result.device, context, callback)
+            }
+
+            override fun onScanFailed(errorCode: Int) {
+                if (isFinished) return
+                isFinished = true
+                connectDirectly(device, context, callback)
+            }
+        }
+
+        val timeoutRunnable = Runnable {
+            if (!scanCallback.isFinished) {
+                scanCallback.isFinished = true
+                try {
+                    scanner.stopScan(scanCallback)
+                } catch (e: SecurityException) {
+                    // Ignore
+                }
+                connectDirectly(device, context, callback)
+            }
+        }
+
+        handler.postDelayed(timeoutRunnable, 3000) // 3 秒超时
+        try {
+            scanner.startScan(listOf(scanFilter), scanSettings, scanCallback)
+        } catch (e: SecurityException) {
+            scanCallback.isFinished = true
+            handler.removeCallbacks(timeoutRunnable)
+            connectDirectly(device, context, callback)
+        }
+    }
+
+    private fun connectDirectly(
+        device: android.bluetooth.BluetoothDevice,
+        context: Context,
+        callback: ConnectionCallback
+    ) {
         device.connectGatt(
             context,
             false,

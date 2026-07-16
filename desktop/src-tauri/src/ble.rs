@@ -1,6 +1,14 @@
 use std::collections::HashMap;
 use std::sync::Mutex as StdMutex;
 use tauri::{AppHandle, Emitter, Manager};
+use ble_peripheral_rust::{Peripheral, PeripheralImpl};
+use ble_peripheral_rust::gatt::{
+    service::Service,
+    characteristic::Characteristic,
+    properties::{CharacteristicProperty, AttributePermission},
+    peripheral_event::{PeripheralEvent, RequestResponse, WriteRequestResponse, ReadRequestResponse},
+};
+use uuid::Uuid;
 
 use crate::{config, crypto, protocol, storage};
 
@@ -214,26 +222,140 @@ fn get_ble_mac() -> String {
 
 pub fn start_service(app_handle: &AppHandle) -> Result<(), String> {
     let state = app_handle.state::<BleState>();
-    start_internal(&state)?;
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+
+    start_internal(&state, tx)?;
 
     let _ = app_handle.emit("log-message", "正在启动服务...");
     let _ = app_handle.emit("ble-status-sync", true);
     update_menu_checked(app_handle, true);
 
-    #[cfg(target_os = "windows")]
-    {
-        let app_handle = app_handle.clone();
-        tauri::async_runtime::spawn(async move {
-            match crate::ble_winrt::start_ble_peripheral(&app_handle).await {
-                Ok(()) => {}
-                Err(e) => {
-                    let _ = app_handle.emit("log-message", format!("BLE 启动失败: {}", e));
-                }
+    let app_handle_clone = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        let app = app_handle_clone.clone();
+        if let Err(e) = run_peripheral_task(app, rx).await {
+            let _ = app_handle_clone.emit("log-message", format!("BLE 启动失败: {}", e));
+            // 发生异常时重置状态
+            let state = app_handle_clone.state::<BleState>();
+            if let Ok(mut is_running) = state.is_running.lock() {
+                *is_running = false;
             }
-        });
+            let _ = app_handle_clone.emit("ble-status-sync", false);
+            update_menu_checked(&app_handle_clone, false);
+        }
+    });
+
+    Ok(())
+}
+
+async fn run_peripheral_task(
+    app_handle: AppHandle,
+    mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+) -> Result<(), String> {
+    let (event_tx, event_rx) = tokio::sync::mpsc::channel::<PeripheralEvent>(256);
+    
+    // 1. 初始化 Peripheral
+    let mut peripheral = Peripheral::new(event_tx)
+        .await
+        .map_err(|e| format!("Failed to create peripheral: {:?}", e))?;
+
+    // 2. 等待蓝牙适配器就绪
+    while !peripheral.is_powered().await.map_err(|e| format!("{:?}", e))? {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let _ = app_handle.emit("log-message", "BLE: 适配器就绪");
+
+    // 3. 构建 GATT 服务与特征值
+    let srv_uuid = Uuid::parse_str(SERVICE_UUID).map_err(|e| format!("Invalid service UUID: {}", e))?;
+    let char_uuid = Uuid::parse_str(CHAR_WRITE_UUID).map_err(|e| format!("Invalid characteristic UUID: {}", e))?;
+
+    let characteristic = Characteristic {
+        uuid: char_uuid,
+        properties: vec![CharacteristicProperty::WriteWithoutResponse],
+        permissions: vec![AttributePermission::Writeable],
+        ..Default::default()
+    };
+
+    let service = Service {
+        uuid: srv_uuid,
+        primary: true,
+        characteristics: vec![characteristic],
+    };
+
+    let _ = peripheral.add_service(&service).await;
+    let _ = app_handle.emit("log-message", "BLE: GATT 服务与特征值创建成功");
+
+    // 4. 启动广播
+    peripheral
+        .start_advertising("BleSyncPC", &[srv_uuid])
+        .await
+        .map_err(|e| format!("Start advertising failed: {:?}", e))?;
+    let _ = app_handle.emit("log-message", "BLE: 广播已开启");
+
+    // 5. 监听事件
+    tokio::select! {
+        _ = handle_ble_events(app_handle.clone(), event_rx) => {}
+        _ = &mut shutdown_rx => {
+            let _ = app_handle.emit("log-message", "BLE: 正在关闭服务，停止广播");
+        }
     }
 
     Ok(())
+}
+
+async fn handle_ble_events(
+    app_handle: AppHandle,
+    mut event_rx: tokio::sync::mpsc::Receiver<PeripheralEvent>,
+) {
+    let mut fragments = FragmentBuffer::new();
+
+    while let Some(event) = event_rx.recv().await {
+        match event {
+            PeripheralEvent::WriteRequest {
+                request: _,
+                offset: _,
+                value,
+                responder,
+            } => {
+                // 1. 回复客户端
+                let _ = responder.send(WriteRequestResponse {
+                    response: RequestResponse::Success,
+                });
+
+                // 2. 数据送入分片处理器
+                if !value.is_empty() {
+                    if let Some(frame) = protocol::parse_frame(&value) {
+                        let _ = app_handle.emit(
+                            "log-message",
+                            format!(
+                                "BLE 收到帧: 类型 {:02X}, 包序号 {}/{}",
+                                frame.msg_type, frame.seq, frame.total_seq
+                            ),
+                        );
+                        if let Some(full) = fragments.insert(
+                            frame.msg_type,
+                            frame.total_seq,
+                            frame.seq,
+                            frame.payload,
+                        ) {
+                            handle_full_message(&app_handle, frame.msg_type, &full).await;
+                        }
+                    }
+                }
+            }
+            PeripheralEvent::ReadRequest {
+                request: _,
+                offset: _,
+                responder,
+            } => {
+                let _ = responder.send(ReadRequestResponse {
+                    value: vec![].into(),
+                    response: RequestResponse::Success,
+                });
+            }
+            _ => {}
+        }
+    }
 }
 
 pub fn stop_service(app_handle: &AppHandle) -> Result<(), String> {

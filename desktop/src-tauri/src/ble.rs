@@ -10,20 +10,27 @@ const CHAR_NOTIFY_UUID: &str = "0000D5E6-0000-1000-8000-00805F9B34FB";
 
 pub struct BleState {
     pub is_running: StdMutex<bool>,
+    pub shutdown_tx: StdMutex<Option<tokio::sync::oneshot::Sender<()>>>,
 }
 
 impl Default for BleState {
     fn default() -> Self {
-        Self { is_running: StdMutex::new(false) }
+        Self {
+            is_running: StdMutex::new(false),
+            shutdown_tx: StdMutex::new(None),
+        }
     }
 }
 
 // ── 内部函数 ──
 
-fn start_internal(state: &BleState) -> Result<(), String> {
+fn start_internal(state: &BleState, tx: tokio::sync::oneshot::Sender<()>) -> Result<(), String> {
     let mut is_running = state.is_running.lock().map_err(|e| e.to_string())?;
     if *is_running { return Err("Server already running".to_string()); }
     *is_running = true;
+    if let Ok(mut guard) = state.shutdown_tx.lock() {
+        *guard = Some(tx);
+    }
     Ok(())
 }
 
@@ -31,6 +38,11 @@ fn stop_internal(state: &BleState) -> Result<(), String> {
     let mut is_running = state.is_running.lock().map_err(|e| e.to_string())?;
     if !*is_running { return Err("Server not running".to_string()); }
     *is_running = false;
+    if let Ok(mut guard) = state.shutdown_tx.lock() {
+        if let Some(tx) = guard.take() {
+            let _ = tx.send(());
+        }
+    }
     Ok(())
 }
 

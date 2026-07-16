@@ -74,6 +74,27 @@
                 android:layout_height="wrap_content"
                 android:text="@string/s_send_reminder" />
 
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="12dp" />
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="120dp"
+                android:background="#F0F0F0"
+                android:padding="8dp">
+
+                <TextView
+                    android:id="@+id/tv_log"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textIsSelectable="true"
+                    android:textSize="12sp"
+                    android:text="日志：等待操作…" />
+
+            </ScrollView>
+
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

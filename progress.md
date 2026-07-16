@@ -1,5 +1,15 @@
 # Progress Log
 
+## Session: 2026-07-15 — Tauri 桌面端迁移
+
+- **Status:** 核心框架就绪，BLE 和通知待实现
+- 新增 `desktop/` Tauri v2 项目替代旧 `windows/` (C# WinForms) + `macos/` 独立实现
+- Tauri 后端模块：lib.rs（托盘+窗口管理）、ble.rs（BLE 占位）、crypto.rs（AES-GCM+HKDF，含测试）、protocol.rs（帧协议，含测试）、storage.rs（配对+注册表）、event_handler.rs（托盘事件分发）
+- 前端 Vanilla JS，中英双语，通过 `window.__TAURI__.core` 调用命令
+- 加密对齐：桌面端使用 Rust 原生 aes-gcm/hkdf crate，Android 端同步改为 AES-GCM
+- 同步更新 task_plan.md（Phase 4 合并跨平台桌面端）、findings.md（加密算法和选型记录）
+- `../windows/` 旧 C# 实现标记为已废弃
+
 ## Session: 2026-07-15 — SDK API 改进设计
 
 - **Status:** 设计完成，进入实现
@@ -51,13 +61,11 @@
 ### Phase 4: Android SDK (Kotlin)
 - **Status:** pending
 
-### Phase 5: Windows 端 (C# .NET)
-- **Status:** pending
+### Phase 4: 跨平台桌面端 (Tauri v2)
+- **Status:** 进行中（核心框架就绪，BLE 和通知待实现）
+- 替代原 Phase 5 (C# Windows) + Phase 6 (Swift macOS)
 
-### Phase 6: macOS 端 (Swift)
-- **Status:** pending
-
-### Phase 7: 联调测试
+### Phase 5: 联调测试
 - **Status:** pending
 
 ## Test Results
@@ -73,8 +81,8 @@
 ## 5-Question Reboot Check
 | Question | Answer |
 |----------|--------|
-| Where am I? | Phase 1-2 complete, 等待用户选择执行方式后进入 Phase 3 |
-| Where am I going? | Phase 3-7: 加密模块 + Android SDK + Windows + macOS + 联调测试 |
+| Where am I? | Phase 1-3 完成，Phase 4 (Tauri 桌面端) 进行中，核心框架就绪 |
+| Where am I going? | Phase 4: 实现 BLE GATT Server + 通知适配 + macOS/Linux 兼容；Phase 5: 联调测试 |
 | What's the goal? | 创建跨平台 BLE 闹钟通知同步开源项目 |
 | What have I learned? | 见 findings.md |
-| What have I done? | 完成设计文档（含加密方案+扫码分层）+ 实现规划 (16 tasks) |
+| What have I done? | 设计文档 + Android SDK + Tauri 桌面端骨架；旧 windows/ C# 实现已废弃 |

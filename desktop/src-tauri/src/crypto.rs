@@ -4,11 +4,14 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 use rand::RngCore;
 
-const SALT: &[u8] = b"BleNotificationSync";
-
-/// Derive a 32-byte AES key from package name using HKDF-SHA256
-pub fn derive_key(package_name: &str) -> [u8; 32] {
-    let hk = Hkdf::<Sha256>::new(Some(SALT), package_name.as_bytes());
+/// 从包名和配对随机数派生 baseKey（HKDF-SHA256）
+/// salt = "BleNotificationSync"
+/// IKM  = package_name + random（包名字节拼接 32 字节随机数）
+/// info = ""（对齐 Android 端）
+pub fn derive_key(package_name: &str, random: &[u8; 32]) -> [u8; 32] {
+    let mut ikm = package_name.as_bytes().to_vec();
+    ikm.extend_from_slice(random);
+    let hk = Hkdf::<Sha256>::new(Some(b"BleNotificationSync"), &ikm);
     let mut key = [0u8; 32];
     hk.expand(b"", &mut key).expect("HKDF expand failed");
     key
@@ -47,40 +50,50 @@ pub fn decrypt(key: &[u8; 32], nonce: &[u8], ciphertext: &[u8]) -> Result<Vec<u8
 mod tests {
     use super::*;
 
+    const RANDOM_A: [u8; 32] = [0xAA; 32];
+    const RANDOM_B: [u8; 32] = [0xBB; 32];
+
     #[test]
     fn test_key_derivation_deterministic() {
-        let key1 = derive_key("com.example.app");
-        let key2 = derive_key("com.example.app");
+        let key1 = derive_key("com.example.app", &RANDOM_A);
+        let key2 = derive_key("com.example.app", &RANDOM_A);
         assert_eq!(key1, key2);
     }
 
     #[test]
     fn test_different_packages_different_keys() {
-        let key1 = derive_key("com.app.one");
-        let key2 = derive_key("com.app.two");
+        let key1 = derive_key("com.app.one", &RANDOM_A);
+        let key2 = derive_key("com.app.two", &RANDOM_A);
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_different_random_different_keys() {
+        let key1 = derive_key("com.example.app", &RANDOM_A);
+        let key2 = derive_key("com.example.app", &RANDOM_B);
         assert_ne!(key1, key2);
     }
 
     #[test]
     fn test_encrypt_decrypt_roundtrip() {
-        let key = derive_key("com.example.app");
+        let key = derive_key("com.example.app", &RANDOM_A);
         let plaintext = b"Hello, BLE Notification Sync!";
-        
+
         let (nonce, ciphertext) = encrypt(&key, plaintext).unwrap();
         let decrypted = decrypt(&key, &nonce, &ciphertext).unwrap();
-        
+
         assert_eq!(plaintext.to_vec(), decrypted);
     }
 
     #[test]
     fn test_wrong_key_fails() {
-        let key1 = derive_key("com.app.one");
-        let key2 = derive_key("com.app.two");
+        let key1 = derive_key("com.app.one", &RANDOM_A);
+        let key2 = derive_key("com.app.two", &RANDOM_A);
         let plaintext = b"Secret message";
-        
+
         let (nonce, ciphertext) = encrypt(&key1, plaintext).unwrap();
         let result = decrypt(&key2, &nonce, &ciphertext);
-        
+
         assert!(result.is_err());
     }
 }

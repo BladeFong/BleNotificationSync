@@ -1,12 +1,12 @@
 # Findings & Decisions
 
 ## Requirements
-- Android → Windows/macOS BLE 闹钟通知同步
+- Android → Windows/macOS/Linux BLE 闹钟通知同步
 - 零云端、零账号、纯本地
 - 二维码配对，无需 OS 蓝牙配对
 - 每次通知独立连接，用完即断
 - 支持 APP 图标传输
-- AES-CCM 加密，LibTomCrypt 跨平台
+- AES-GCM 加密（Android 用 LibTomCrypt JNI，桌面用 Rust 原生 crate）
 
 ## Research Findings
 - BLE GATT 连接耗时约 300ms - 1 秒
@@ -16,8 +16,8 @@
 - macOS UserNotifications 支持图标
 - BLE 广播包最多 31 字节，放不下图标
 - Kotlin 和 Java 性能基本一致（都跑在 JVM 上）
-- LibTomCrypt 支持 AES-CCM，跨平台 C 库
-- AES-CCM 加密后密文比明文长 tag 长度（16 字节）
+- LibTomCrypt 支持 AES-CCM/AES-GCM，跨平台 C 库（仅 Android JNI 使用）
+- AES-GCM 加密后密文比明文长 tag 长度（16 字节）
 
 ## Technical Decisions
 | Decision | Rationale |
@@ -27,7 +27,8 @@
 | 分片协议: Magic+MsgType+Seq+TotalSeq+Payload | 简单高效，支持大数据传输 |
 | 图标在绑定时传输 | 一次性传输，后续通知复用 |
 | 独立 GATT Characteristic | 简化服务定义 |
-| AES-CCM 加密 | 认证加密，防篡改，LibTomCrypt 支持 |
+| AES-GCM 加密 | 认证加密，防篡改；Android 用 LibTomCrypt，桌面用 Rust aes-gcm crate（已从 CCM 迁移） |
+| 桌面端 Tauri v2 (Rust + Web) | 跨平台统一方案，替代 C# WinForms + Swift 独立实现 |
 | 密钥按包名管理 | 绑定时生成，APP 和 GATT Server 分别存储 |
 | 扫码三层设计 | 解码层/相机层/UI 层，APP 灵活选择 |
 | Android minSdk API 23 | 覆盖 99.2% 设备，避开 Camera2 早期 bug |
@@ -45,6 +46,8 @@
 ## Technical Decisions (追加)
 | Decision | Rationale |
 |----------|-----------|
+| 桌面端迁移到 Tauri v2 | 跨平台统一（Windows/macOS/Linux），Rust 后端复用加密生态，Web 前端快速迭代 |
+| 桌面端使用 Rust 原生加密 crate | 替代 LibTomCrypt 桌面集成，减少 C 编译依赖，与 Tauri Rust 后端一致 |
 | 密钥 = HKDF(package+random) | 配对时 Android 生成 32B 随机数，双方 HKDF(package+random)→baseKey 持久化。防止反编译包名推算密钥 |
 | baseKey 持久化 + nonce 每次生成 | 双层随机：配对级隔离 + 消息级隔离 |
 | AES-GCM（原设计） | 对齐桌面 Rust aes-gcm crate，替代原 CCM 实现 |
@@ -57,6 +60,7 @@
 - SDK 改进设计: `docs/superpowers/specs/2026-07-15-sdk-api-improvements-design.md`
 - SDK 改进计划: `docs/superpowers/plans/2026-07-15-sdk-api-improvements.md`
 - 原始方案: `docs/reference/original-scheme.md`
+- 旧 Windows C# 实现（已废弃）: `windows/`
 
 ## Issues Encountered
 | Issue | Resolution |

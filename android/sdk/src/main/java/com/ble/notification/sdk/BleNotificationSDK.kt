@@ -60,7 +60,6 @@ class BleNotificationSDK private constructor(private val context: Context) {
         val missing = BleClient.getMissingPermissions(context)
         if (missing.isNotEmpty()) {
             ActivityCompat.requestPermissions(activity, missing, REQUEST_CODE_BLE_PERMISSIONS)
-            callback.onError(SdkError.PermissionDenied(missing.toList()))
             return
         }
 
@@ -69,6 +68,8 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 callback.onError(SdkError.Unknown("QR scan cancelled or failed"))
                 return@newInstance
             }
+
+            callback.onQrResult(qrResult.mac, qrResult.uuid)
 
             pairingManager.startPairing(qrResult, appName, packageName, object : PairingCallback {
                 override fun onScanSuccess() = callback.onScanSuccess()

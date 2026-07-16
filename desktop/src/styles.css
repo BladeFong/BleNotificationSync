@@ -156,3 +156,59 @@ h1 {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* Device list */
+.device-section {
+    background: white;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    flex-shrink: 0;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.device-list {
+    font-size: 13px;
+}
+
+.device-empty {
+    color: #999;
+    font-style: italic;
+}
+
+.device-item {
+    display: flex;
+    gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px solid #f0f0f0;
+    align-items: center;
+}
+
+.device-item:last-child {
+    border-bottom: none;
+}
+
+.device-name {
+    font-weight: 600;
+    color: #2563eb;
+    min-width: 60px;
+}
+
+.device-pkg {
+    color: #666;
+    flex: 1;
+}
+
+.device-mac {
+    color: #999;
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+}

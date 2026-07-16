@@ -25,6 +25,14 @@
             <button id="pairBtn" class="btn btn-secondary" data-i18n="pair">扫码绑定</button>
         </div>
         
+        <div class="device-section">
+            <div class="section-header">
+                <span class="label" data-i18n="paired_devices">已绑定设备:</span>
+                <span id="deviceCount" class="value">0</span>
+            </div>
+            <div id="deviceList" class="device-list"></div>
+        </div>
+
         <div class="log-section">
             <div id="logBox" class="log-box"></div>
         </div>
@@ -36,8 +44,8 @@
         document.documentElement.lang = isChinese ? 'zh-CN' : 'en';
         
         const translations = {
-            zh: { status: '状态:', stopped: '未启动', connections: '连接数:', start: '启动服务', stop: '停止服务', pair: '扫码绑定' },
-            en: { status: 'Status:', stopped: 'Stopped', connections: 'Connections:', start: 'Start', stop: 'Stop', pair: 'Pair Device' }
+            zh: { status: '状态:', stopped: '未启动', connections: '连接数:', paired_devices: '已绑定设备:', start: '启动服务', stop: '停止服务', pair: '扫码绑定' },
+            en: { status: 'Status:', stopped: 'Stopped', connections: 'Connections:', paired_devices: 'Paired Devices:', start: 'Start', stop: 'Stop', pair: 'Pair Device' }
         };
         
         const t = isChinese ? translations.zh : translations.en;
@@ -45,6 +53,8 @@
             el.textContent = t[el.dataset.i18n] || el.textContent;
         });
     </script>
+    <script src="qrcode.js"></script>
+    <script src="qrcode_UTF8.js"></script>
     <script type="module" src="main.js"></script>
 </body>
 </html>

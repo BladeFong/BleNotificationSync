@@ -1,10 +1,10 @@
 # Task Plan: BLE Notification Sync 开源项目
 
 ## Goal
-创建一个跨平台 BLE 闹钟通知同步开源项目，包含协议规范、Android SDK、Windows 端和 macOS 端。
+创建一个跨平台 BLE 闹钟通知同步开源项目，包含协议规范、Android SDK、跨平台桌面端（Tauri v2）。
 
 ## Current Phase
-Phase 1
+Phase 4
 
 ## Phases
 
@@ -19,8 +19,8 @@ Phase 1
 ### Phase 2: 加密模块实现
 - [x] 下载 LibTomCrypt 源码到 third_party/libtomcrypt/
 - [x] Android 端集成 LibTomCrypt (JNI 源码编译)
-- [ ] Windows 端集成 LibTomCrypt (源码编译 + P/Invoke)
-- [ ] macOS 端集成 LibTomCrypt (源码编译 + Bridging Header)
+- [x] Windows 端集成 LibTomCrypt — 已跳过，桌面改用 Rust 原生 crate
+- [x] macOS 端集成 LibTomCrypt — 已跳过，桌面改用 Rust 原生 crate
 - [x] 实现 AES-GCM 加解密（已改为 GCM 对齐桌面）
 - [x] 实现密钥派生（HKDF-SHA256，info="" 对齐桌面）
 - **Status:** Android 端 complete
@@ -45,25 +45,21 @@ Phase 1
 - 计划：`docs/superpowers/plans/2026-07-15-sdk-api-improvements.md`
 - **Status:** pending
 
-### Phase 4: Windows 端 (C# .NET)
-- [ ] 创建 .NET 项目结构
-- [ ] 实现加密模块
-- [ ] 实现 GATT Server
-- [ ] 实现通知适配层（Toast）
-- [ ] 实现配对存储（含密钥管理）
-- [ ] 实现 WinForms 托盘 UI
-- **Status:** pending
+### Phase 4: 跨平台桌面端 (Tauri v2) — 替代原 Windows/macOS 独立实现
+- [x] 创建 Tauri v2 项目骨架（Rust + Vanilla JS）
+- [x] 实现系统托盘（显示窗口/启动服务/自启/静默/退出）
+- [x] 实现加密模块（Rust aes-gcm + hkdf，对齐 Android 端）
+- [x] 实现通信协议模块（二进制帧解析/构建）
+- [x] 实现配对存储（内存 + Windows 注册表设置持久化）
+- [x] 实现事件处理（托盘菜单分发）
+- [x] 前端 UI（中英双语、状态显示、日志控制台、扫码绑定）
+- [ ] 实现 BLE GATT Server（btleplug，当前占位）
+- [ ] 实现通知适配层（Toast/系统通知）
+- [ ] 实现 macOS/Linux 兼容层
+- **Status:** 进行中（核心框架就绪，BLE 和通知待实现）
+- **原代码：** `../windows/` 为旧 C# .NET WinForms 实现，已废弃
 
-### Phase 5: macOS 端 (Swift)
-- [ ] 创建 Xcode 项目结构
-- [ ] 实现加密模块
-- [ ] 实现 CBPeripheralManager
-- [ ] 实现通知服务（UserNotifications）
-- [ ] 实现配对存储（含密钥管理）
-- [ ] 实现 SwiftUI MenuBarExtra UI
-- **Status:** pending
-
-### Phase 6: 联调测试
+### Phase 5: 联调测试
 - [ ] Android ↔ Windows 互通测试（含加密）
 - [ ] Android ↔ macOS 互通测试（含加密）
 - [ ] 编写 README 和集成文档
@@ -82,10 +78,10 @@ Phase 1
 | 无保活，用完即断 | 简化架构，降低功耗 |
 | 二维码配对 | 避免蓝牙乱推送，无需 PC 二次确认 |
 | 纯 Kotlin SDK | 现代 Android 开发首选，Java 可直接调用 |
-| WinForms 托盘 | 开发量最少，几行代码实现托盘 |
-| SwiftUI MenuBarExtra | macOS 13+，代码量比 AppKit 少 70% |
-| HKDF + AES-CCM | 密钥派生 + 认证加密，双方独立计算密钥 |
-| LibTomCrypt 源码集成 | 跨平台一致，无二进制兼容问题 |
+| Tauri v2 系统托盘（tray-icon） | 替代原 WinForms 托盘，跨平台统一方案 |
+| SwiftUI MenuBarExtra | 已废弃，macOS 并入 Tauri 方案 |
+| HKDF + AES-GCM | 密钥派生 + 认证加密（已从 CCM 改为 GCM 对齐 Rust aes-gcm crate） |
+| LibTomCrypt 源码集成 | 仅 Android JNI 使用；桌面端使用 Rust 原生加密 crate（aes-gcm, hkdf, sha2） |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |

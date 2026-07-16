@@ -13,6 +13,7 @@ enum class PairingState {
 
 interface PairingCallback {
     fun onScanSuccess()
+    fun onQrResult(mac: String, uuid: String) {}
     fun onConnecting()
     fun onRegistering()
     fun onPaired()

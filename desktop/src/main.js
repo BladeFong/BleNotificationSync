@@ -36,12 +36,7 @@ function updateUI() {
 // Start server
 async function startServer() {
     try {
-        addLog(isChinese ? '正在启动服务...' : 'Starting server...');
         await invoke('start_gatt_server');
-        isRunning = true;
-        updateUI();
-        invoke('update_ble_menu_state', { isRunning: true });
-        addLog(isChinese ? 'GATT 服务已启动' : 'GATT server started');
     } catch (error) {
         addLog(`${isChinese ? '启动失败' : 'Start failed'}: ${error}`);
     }
@@ -50,12 +45,7 @@ async function startServer() {
 // Stop server
 async function stopServer() {
     try {
-        addLog(isChinese ? '正在停止服务...' : 'Stopping server...');
         await invoke('stop_gatt_server');
-        isRunning = false;
-        updateUI();
-        invoke('update_ble_menu_state', { isRunning: false });
-        addLog(isChinese ? 'GATT 服务已停止' : 'GATT server stopped');
     } catch (error) {
         addLog(`${isChinese ? '停止失败' : 'Stop failed'}: ${error}`);
     }
@@ -94,32 +84,14 @@ pairBtn.addEventListener('click', () => {
         macDisplay.textContent = `MAC: ${mac}`;
         const qrContent = `ble://pair?mac=${mac}&uuid=${uuid}`;
 
-        // Replace loading spinner with QR canvas
+        // Replace loading spinner with real QR code
         qrContainer.innerHTML = '';
-        const canvas = document.createElement('canvas');
-        canvas.width = 200;
-        canvas.height = 200;
-        qrContainer.appendChild(canvas);
-
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, 200, 200);
-        ctx.fillStyle = 'black';
-
-        const hash = qrContent.split('').reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0);
-        const rng = (seed) => { let x = Math.sin(seed++) * 10000; return x - Math.floor(x); };
-        let seed = Math.abs(hash);
-        for (let i = 0; i < 25; i++) {
-            for (let j = 0; j < 25; j++) {
-                if (rng(seed++) > 0.5) ctx.fillRect(i * 8, j * 8, 8, 8);
-            }
-        }
-        const drawCorner = (x, y) => {
-            ctx.fillStyle = 'black'; ctx.fillRect(x, y, 56, 56);
-            ctx.fillStyle = 'white'; ctx.fillRect(x + 8, y + 8, 40, 40);
-            ctx.fillStyle = 'black'; ctx.fillRect(x + 16, y + 16, 24, 24);
-        };
-        drawCorner(0, 0); drawCorner(144, 0); drawCorner(0, 144);
+        const qr = qrcode(0, 'M'); // type 0 (auto), error correction M
+        qr.addData(qrContent);
+        qr.make();
+        qrContainer.innerHTML = qr.createSvgTag({ scalable: true });
+        qrContainer.querySelector('svg').style.width = '200px';
+        qrContainer.querySelector('svg').style.height = '200px';
 
         addLog(`${isChinese ? '显示绑定二维码' : 'Showing pairing QR code'}: ${mac}`);
     }).catch(error => {
@@ -129,21 +101,20 @@ pairBtn.addEventListener('click', () => {
     });
 });
 
-// Unified BLE status sync (from Rust backend)
+// ── 事件监听 ──
+
+// BLE 状态同步（Rust 后端统一推送，前端仅被动更新 UI，不做日志）
 listen('ble-status-sync', (event) => {
-    const wasRunning = isRunning;
     isRunning = event.payload;
     updateUI();
-    // Update menu check state in Rust backend
-    invoke('update_ble_menu_state', { isRunning: isRunning });
-    if (isRunning && !wasRunning) {
-        addLog(isChinese ? 'GATT 服务已启动' : 'GATT server started');
-    } else if (!isRunning && wasRunning) {
-        addLog(isChinese ? 'GATT 服务已停止' : 'GATT server stopped');
-    }
 });
 
-// Listen for window show event from tray
+// 托盘日志消息
+listen('log-message', (event) => {
+    addLog(event.payload);
+});
+
+// 托盘显示窗口事件
 listen('show-window', () => {
     const window = getCurrentWindow();
     window.show();
@@ -151,6 +122,37 @@ listen('show-window', () => {
     window.setFocus();
 });
 
+// ── 设备列表 ──
+
+async function refreshDeviceList() {
+    try {
+        const devices = await invoke('get_paired_devices');
+        const deviceList = document.getElementById('deviceList');
+        const deviceCount = document.getElementById('deviceCount');
+        if (!deviceList || !deviceCount) return;
+        deviceCount.textContent = devices.length;
+        if (devices.length === 0) {
+            deviceList.innerHTML = `<span class="device-empty">${isChinese ? '暂无绑定设备' : 'No paired devices'}</span>`;
+            return;
+        }
+        deviceList.innerHTML = devices.map(d =>
+            `<div class="device-item">
+                <span class="device-name">${d.app_name}</span>
+                <span class="device-pkg">${d.package_name}</span>
+                <span class="device-mac">${d.mac}</span>
+            </div>`
+        ).join('');
+    } catch (e) {
+        // ignore
+    }
+}
+
+// 设备注册事件
+listen('device-registered', () => {
+    refreshDeviceList();
+});
+
 // Initialize
 addLog(isChinese ? '应用已启动' : 'Application started');
 updateUI();
+refreshDeviceList();

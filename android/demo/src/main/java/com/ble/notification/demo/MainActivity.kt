@@ -3,6 +3,7 @@ package com.ble.notification.demo
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -13,6 +14,9 @@ import com.ble.notification.pairing.PairingCallback
 import com.ble.notification.sdk.BleNotificationSDK
 import com.ble.notification.sdk.ReminderCallback
 import com.ble.notification.sdk.SdkError
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -22,6 +26,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnUnpair: Button
     private lateinit var etMessage: EditText
     private lateinit var btnSend: Button
+    private lateinit var tvLog: TextView
+
+    private val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -40,6 +47,7 @@ class MainActivity : AppCompatActivity() {
         supportActionBar?.setTitle(R.string.s_app_name)
 
         sdk = BleNotificationSDK.init(this)
+        tvLog = findViewById(R.id.tv_log)
 
         btnScanPair = findViewById(R.id.btn_scan_pair)
         btnUnpair = findViewById(R.id.btn_unpair)
@@ -53,23 +61,35 @@ class MainActivity : AppCompatActivity() {
         updateButtonStates()
     }
 
+    private fun log(msg: String) {
+        val ts = sdf.format(Date())
+        val line = "$ts $msg\n"
+        tvLog.append(line)
+    }
+
     private fun startPairing() {
+        log("开始扫描绑定…")
         sdk.startPairing(this, "BLE通知测试", object : PairingCallback {
             override fun onScanSuccess() {
-                Toast.makeText(this@MainActivity, "扫码成功，连接中…", Toast.LENGTH_SHORT).show()
+                // logged in onQrResult above
+            }
+            override fun onQrResult(mac: String, uuid: String) {
+                log("QR: mac=$mac uuid=$uuid")
+                log("连接 $mac …")
             }
             override fun onConnecting() {
-                Toast.makeText(this@MainActivity, "正在连接…", Toast.LENGTH_SHORT).show()
+                log("GATT 连接中…")
             }
             override fun onRegistering() {
-                Toast.makeText(this@MainActivity, "正在注册…", Toast.LENGTH_SHORT).show()
+                log("正在注册…")
             }
             override fun onPaired() {
+                log("绑定成功！")
                 Toast.makeText(this@MainActivity, "绑定成功！", Toast.LENGTH_SHORT).show()
                 runOnUiThread { updateButtonStates() }
             }
             override fun onError(error: SdkError) {
-                Toast.makeText(this@MainActivity, "绑定失败: ${error.message}", Toast.LENGTH_LONG).show()
+                log("失败: ${error.message}")
                 runOnUiThread { updateButtonStates() }
             }
         })
@@ -77,6 +97,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun doUnpair() {
         sdk.unpair(packageName)
+        log("已解除绑定")
         Toast.makeText(this, "已解除绑定", Toast.LENGTH_SHORT).show()
         updateButtonStates()
     }
@@ -87,6 +108,7 @@ class MainActivity : AppCompatActivity() {
         }
         val triggerAt = System.currentTimeMillis() + 10_000
 
+        log("设置闹钟: $message")
         sdk.setReminder(
             taskId = "demo_${System.currentTimeMillis()}",
             title = "BLE 通知测试",
@@ -94,6 +116,7 @@ class MainActivity : AppCompatActivity() {
             triggerAt = triggerAt,
             callback = object : ReminderCallback {
                 override fun onScheduled(taskId: String) {
+                    log("闹钟已设置，10秒后触发，退出App")
                     Toast.makeText(this@MainActivity, "提醒已设置，10 秒后触发", Toast.LENGTH_SHORT).show()
                     finish()
                 }
@@ -107,5 +130,6 @@ class MainActivity : AppCompatActivity() {
         val paired = sdk.isPaired(packageName)
         btnScanPair.isEnabled = !paired
         btnUnpair.isEnabled = paired
+        log("按钮状态: 绑定=$paired")
     }
 }

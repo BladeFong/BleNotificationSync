@@ -97,7 +97,8 @@ object BleClient {
                         gatt.close()
                     }
                 }
-            }
+            },
+            android.bluetooth.BluetoothDevice.TRANSPORT_LE
         )
     }
 }

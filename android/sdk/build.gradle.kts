@@ -11,6 +11,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
+
+        ndk {
+            abiFilters.add("arm64-v8a")
+            abiFilters.add("x86_64")
+        }
     }
 
     compileOptions {
@@ -31,6 +36,13 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
 }
 
 dependencies {
@@ -46,6 +58,9 @@ dependencies {
 
     // Encrypted SharedPreferences
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // Nordic BLE Scanner Compat
+    implementation("no.nordicsemi.android.support.v18:scanner:1.6.0")
 
     // AndroidX core
     implementation("androidx.core:core-ktx:1.15.0")

@@ -1,5 +1,6 @@
 package com.ble.notification.demo
 
+import android.Manifest
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
@@ -58,13 +59,17 @@ class MainActivity : AppCompatActivity() {
         btnUnpair.setOnClickListener { doUnpair() }
         btnSend.setOnClickListener { doSendReminder() }
 
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 0x7200_0002)
+        }
+
         updateButtonStates()
     }
 
     private fun log(msg: String) {
         val ts = sdf.format(Date())
         val line = "$ts $msg\n"
-        tvLog.append(line)
+        runOnUiThread { tvLog.append(line) }
     }
 
     private fun startPairing() {
@@ -85,8 +90,10 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onPaired() {
                 log("绑定成功！")
-                Toast.makeText(this@MainActivity, "绑定成功！", Toast.LENGTH_SHORT).show()
-                runOnUiThread { updateButtonStates() }
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "绑定成功！", Toast.LENGTH_SHORT).show()
+                    updateButtonStates()
+                }
             }
             override fun onError(error: SdkError) {
                 log("失败: ${error.message}")
@@ -103,6 +110,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun doSendReminder() {
+        val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+            !alarmManager.canScheduleExactAlarms()) {
+            log("需要闹钟权限，跳转设置…")
+            startActivity(android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
+            return
+        }
+
         val message = etMessage.text.toString().ifBlank {
             getString(R.string.s_default_text)
         }

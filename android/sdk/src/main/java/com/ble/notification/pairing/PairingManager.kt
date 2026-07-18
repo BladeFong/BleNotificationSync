@@ -51,8 +51,8 @@ class PairingManager(private val context: Context) {
         callback: PairingCallback
     ) {
         if (currentState != PairingState.IDLE) {
-            callback.onError(SdkError.Unknown("Already in state: $currentState"))
-            return
+            // 允许重新配对，重置旧状态
+            currentState = PairingState.IDLE
         }
 
         callback.onScanSuccess()
@@ -60,7 +60,10 @@ class PairingManager(private val context: Context) {
 
         val random = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
 
-        BleClient.connect(context, qrResult.mac, object : ConnectionCallback {
+        BleClient.connect(
+            context = context,
+            mac = qrResult.mac,
+            callback = object : ConnectionCallback {
             override fun onReady(gatt: android.bluetooth.BluetoothGatt) {
                 transitionTo(PairingState.REGISTERING, callback)
 
@@ -69,22 +72,34 @@ class PairingManager(private val context: Context) {
                     packageName = packageName,
                     random = random
                 )
-                gatt.getService(BleClient.SERVICE_UUID)
-                    ?.getCharacteristic(BleClient.WRITE_CHARACTERISTIC_UUID)
-                    ?.let { characteristic ->
-                        characteristic.value = registerFrame
-                        gatt.writeCharacteristic(characteristic)
-                        // Derive and persist baseKey = HKDF(package+random)
-                        val baseKey = deriveBaseKey(packageName, random)
-                        savePairing(packageName, qrResult.mac, appName, baseKey)
-                        transitionTo(PairingState.PAIRED, callback)
-                        callback.onPaired()
-                    }
-                    ?: callback.onError(SdkError.ServiceNotFound())
+                android.util.Log.d("BleClient", "REGISTER frame: ${registerFrame.size} bytes")
+
+                val service = gatt.getService(BleClient.SERVICE_UUID)
+                if (service == null) {
+                    android.util.Log.e("Pairing", "Service not found: ${BleClient.SERVICE_UUID}")
+                    callback.onError(SdkError.ServiceNotFound())
+                    return
+                }
+                val characteristic = service.getCharacteristic(BleClient.WRITE_CHARACTERISTIC_UUID)
+                if (characteristic == null) {
+                    android.util.Log.e("Pairing", "Characteristic not found: ${BleClient.WRITE_CHARACTERISTIC_UUID}")
+                    callback.onError(SdkError.ServiceNotFound())
+                    return
+                }
+                characteristic.value = registerFrame
+                val writeOk = gatt.writeCharacteristic(characteristic)
+                android.util.Log.d("BleClient", "writeCharacteristic returned: $writeOk")
+                val baseKey = deriveBaseKey(packageName, random)
+                val actualMac = gatt.device.address
+                android.util.Log.d("BleClient", "Saving pairing: package=$packageName QR_MAC=${qrResult.mac} actual_MAC=$actualMac")
+                savePairing(packageName, actualMac, appName, baseKey)
+                transitionTo(PairingState.PAIRED, callback)
+                callback.onPaired()
+                currentState = PairingState.IDLE
             }
 
             override fun onError(error: SdkError) {
-                transitionTo(PairingState.IDLE, callback)
+                currentState = PairingState.IDLE
                 callback.onError(error)
             }
         })

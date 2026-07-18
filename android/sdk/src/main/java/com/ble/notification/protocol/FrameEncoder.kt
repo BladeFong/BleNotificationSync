@@ -22,11 +22,11 @@ object FrameEncoder {
      * @return encoded frame bytes
      */
     fun encodeRegister(appName: String, packageName: String, random: ByteArray): ByteArray {
-        val randomB64 = android.util.Base64.encodeToString(random, android.util.Base64.NO_WRAP)
+        val randomHex = random.joinToString("") { "%02x".format(it) }
         val json = buildJson(
             "app_name" to jsonString(appName),
             "package" to jsonString(packageName),
-            "random" to jsonString(randomB64)
+            "random" to jsonString(randomHex)
         )
         return buildFrame(MessageType.REGISTER, 0, 1, json.toByteArray(Charsets.UTF_8))
     }

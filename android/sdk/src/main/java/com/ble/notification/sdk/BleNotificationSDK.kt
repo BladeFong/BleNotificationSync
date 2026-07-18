@@ -124,6 +124,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
                 characteristic.value = frame
                 gatt.writeCharacteristic(characteristic)
+                callback?.onSuccess()
 
                 mainHandler.postDelayed({
                     gatt.disconnect()

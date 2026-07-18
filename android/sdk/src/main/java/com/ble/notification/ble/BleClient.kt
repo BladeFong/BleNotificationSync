@@ -7,6 +7,8 @@ import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.ble.notification.sdk.SdkError
 import java.util.UUID
@@ -29,19 +31,9 @@ object BleClient {
 
     fun getMissingPermissions(context: Context): Array<String> {
         val required = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // API 31+ 官方只需 BLUETOOTH_SCAN + BLUETOOTH_CONNECT
-            // 但部分厂商仍要求定位权限，否则扫描静默返回空结果
-            arrayOf(
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            )
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.ACCESS_FINE_LOCATION)
         } else {
-            arrayOf(
-                Manifest.permission.BLUETOOTH,
-                Manifest.permission.BLUETOOTH_ADMIN,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            )
+            arrayOf(Manifest.permission.BLUETOOTH, Manifest.permission.BLUETOOTH_ADMIN, Manifest.permission.ACCESS_FINE_LOCATION)
         }
         return required.filter {
             ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
@@ -50,133 +42,127 @@ object BleClient {
 
     fun connect(context: Context, mac: String, callback: ConnectionCallback) {
         val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
-        if (bluetoothAdapter == null) {
-            callback.onError(SdkError.BluetoothUnavailable())
-            return
-        }
-
-        if (!bluetoothAdapter.isEnabled) {
-            callback.onError(SdkError.BluetoothDisabled())
-            return
-        }
+        if (bluetoothAdapter == null) { callback.onError(SdkError.BluetoothUnavailable()); return }
+        if (!bluetoothAdapter.isEnabled) { callback.onError(SdkError.BluetoothDisabled()); return }
 
         val missing = getMissingPermissions(context)
-        if (missing.isNotEmpty()) {
-            android.util.Log.w("BleClient", "Missing permissions: ${missing.joinToString()}")
-            callback.onError(SdkError.PermissionDenied(missing.toList()))
-            return
-        }
-
-        // 检查定位服务（部分厂商即使 API 31+ 仍需定位开启，否则扫描静默失败）
-        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
-        val locationEnabled = locationManager?.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) == true
-                || locationManager?.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) == true
-        if (!locationEnabled) {
-            android.util.Log.w("BleClient", "Location services are OFF — BLE scan may return no results")
-        }
+        if (missing.isNotEmpty()) { callback.onError(SdkError.PermissionDenied(missing.toList())); return }
 
         val device = bluetoothAdapter.getRemoteDevice(mac)
-        if (device == null) {
-            callback.onError(SdkError.DeviceNotFound(mac))
-            return
-        }
+        if (device == null) { callback.onError(SdkError.DeviceNotFound(mac)); return }
 
-        // 先发起一轮 BLE 扫描以刷新系统的蓝牙缓存，解析设备地址类型（Public vs Random）
-        val scanner = bluetoothAdapter.bluetoothLeScanner
-        if (scanner == null) {
-            android.util.Log.w("BleClient", "No BLE scanner, direct connect")
-            connectDirectly(device, context, callback)
-            return
-        }
-
-        val scanSettings = android.bluetooth.le.ScanSettings.Builder()
-            .setScanMode(android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .build()
-
-        val handler = android.os.Handler(android.os.Looper.getMainLooper())
-        val scanCallback = object : android.bluetooth.le.ScanCallback() {
-            var isFinished = false
-
-            override fun onScanResult(callbackType: Int, result: android.bluetooth.le.ScanResult) {
-                if (isFinished) return
-                val uuids = result.scanRecord?.serviceUuids
-                android.util.Log.d("BleClient", "Scanned: addr=${result.device.address} uuids=$uuids rssi=${result.rssi}")
-                if (uuids == null || !uuids.contains(android.os.ParcelUuid(SERVICE_UUID))) return
-                isFinished = true
-                try { scanner.stopScan(this) } catch (_: SecurityException) {}
-                connectDirectly(result.device, context, callback)
-            }
-
-            override fun onScanFailed(errorCode: Int) {
-                android.util.Log.e("BleClient", "Scan failed: errorCode=$errorCode")
-                if (isFinished) return
-                isFinished = true
-                connectDirectly(device, context, callback)
-            }
-        }
-
-        val timeoutRunnable = Runnable {
-            if (!scanCallback.isFinished) {
-                android.util.Log.w("BleClient", "Scan timeout, direct connect to: $mac")
-                scanCallback.isFinished = true
-                try { scanner.stopScan(scanCallback) } catch (_: SecurityException) {}
-                connectDirectly(device, context, callback)
-            }
-        }
-
-        handler.postDelayed(timeoutRunnable, 3000)
-        try {
-            android.util.Log.d("BleClient", "Start scan (no filter) for: $mac")
-            scanner.startScan(null, scanSettings, scanCallback)
-        } catch (e: SecurityException) {
-            scanCallback.isFinished = true
-            handler.removeCallbacks(timeoutRunnable)
-            connectDirectly(device, context, callback)
-        }
+        // 策略：先直连旧 MAC，失败再扫描 UUID 找新 MAC
+        tryDirectConnect(device, context, mac, callback)
     }
 
-    private fun connectDirectly(
+    /** 直连旧 MAC，失败自动切换到扫描模式 */
+    private fun tryDirectConnect(
         device: android.bluetooth.BluetoothDevice,
         context: Context,
+        savedMac: String,
         callback: ConnectionCallback
     ) {
-        android.util.Log.d("BleClient", "connectGatt: addr=${device.address} type=${device.type}")
-        device.connectGatt(
-            context,
-            false,
-            object : BluetoothGattCallback() {
+        val handler = Handler(Looper.getMainLooper())
+        var done = false
 
-                override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-                    android.util.Log.d("BleClient", "Connection state: status=$status newState=$newState")
-                    if (newState == BluetoothProfile.STATE_CONNECTED) {
-                        gatt.discoverServices()
-                    } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                        callback.onError(SdkError.ConnectionFailed("status=$status"))
+        val timeout = Runnable {
+            if (!done) { done = true; fallbackScan(context, savedMac, callback) }
+        }
+        handler.postDelayed(timeout, 15_000)
+
+        device.connectGatt(context, false, object : BluetoothGattCallback() {
+            override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                if (done) return
+                if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    handler.removeCallbacks(timeout)
+                    gatt.discoverServices()
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    // status != 0 → 直连失败，转扫描
+                    if (status != 0 && !done) {
+                        done = true
+                        handler.removeCallbacks(timeout)
                         gatt.close()
+                        fallbackScan(context, savedMac, callback)
                     }
                 }
+            }
 
-                override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-                    android.util.Log.d("BleClient", "Services discovered: status=$status")
-                    if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
-                        gatt.requestMtu(TARGET_MTU)
-                    } else {
-                        callback.onError(SdkError.ConnectionFailed("service discovery: $status"))
-                        gatt.close()
-                    }
+            override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                if (done) return
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    servicesDone = true; gatt.requestMtu(TARGET_MTU); tryReady(gatt, callback)
                 }
+            }
 
-                override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-                    android.util.Log.d("BleClient", "MTU changed: status=$status mtu=$mtu")
-                    if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
-                        callback.onReady(gatt)
-                    } else {
-                        callback.onError(SdkError.ConnectionFailed("MTU negotiation: $status"))
-                        gatt.close()
-                    }
+            override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+                if (done) return
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    mtuDone = true; tryReady(gatt, callback)
                 }
-            },
-            android.bluetooth.BluetoothDevice.TRANSPORT_LE
-        )
+            }
+        }, TRANSPORT_LE)
     }
+
+    private var servicesDone = false
+    private var mtuDone = false
+    private var readyCalled = false
+
+    private fun tryReady(gatt: BluetoothGatt, callback: ConnectionCallback) {
+        if (servicesDone && mtuDone && !readyCalled) {
+            readyCalled = true
+            callback.onReady(gatt)
+        }
+    }
+
+    /** 扫描 UUID 找当前实际 MAC，然后连接 */
+    private fun fallbackScan(context: Context, savedMac: String, callback: ConnectionCallback) {
+        val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+        val scanner = bluetoothAdapter?.bluetoothLeScanner
+        if (scanner == null) {
+            callback.onError(SdkError.ConnectionFailed("no scanner"))
+            return
+        }
+
+        val handler = Handler(Looper.getMainLooper())
+        var finished = false
+        var retryCount = 0
+        var doScan: Runnable? = null
+
+        doScan = Runnable {
+            if (finished) return@Runnable
+            val scanSettings = android.bluetooth.le.ScanSettings.Builder()
+                .setScanMode(android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .build()
+
+            val scanCallback = object : android.bluetooth.le.ScanCallback() {
+                override fun onScanResult(callbackType: Int, result: android.bluetooth.le.ScanResult) {
+                    if (finished) return
+                    val uuids = result.scanRecord?.serviceUuids
+                    if (uuids == null || !uuids.contains(android.os.ParcelUuid(SERVICE_UUID))) return
+                    finished = true
+                    handler.removeCallbacksAndMessages(null)
+                    try { scanner.stopScan(this) } catch (_: SecurityException) {}
+                    servicesDone = false; mtuDone = false; readyCalled = false
+                    tryDirectConnect(result.device, context, savedMac, callback)
+                }
+
+                override fun onScanFailed(errorCode: Int) {
+                    if (finished) return
+                    retryCount++
+                    if (retryCount < 3) {
+                        handler.postDelayed(doScan!!, 2000)
+                    } else {
+                        finished = true
+                        callback.onError(SdkError.ConnectionFailed("scan failed after retries"))
+                    }
+                }
+            }
+
+            try { scanner.startScan(null, scanSettings, scanCallback) } catch (_: SecurityException) {}
+            handler.postDelayed({ if (!finished) { finished = true; try { scanner.stopScan(scanCallback) } catch (_: Exception) {} } }, 5000)
+        }
+        doScan.run()
+    }
+
+    private val TRANSPORT_LE = android.bluetooth.BluetoothDevice.TRANSPORT_LE
 }

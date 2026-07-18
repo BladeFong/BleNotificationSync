@@ -59,8 +59,6 @@ dependencies {
     // Encrypted SharedPreferences
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
-    // Nordic BLE Scanner Compat
-    implementation("no.nordicsemi.android.support.v18:scanner:1.6.0")
 
     // AndroidX core
     implementation("androidx.core:core-ktx:1.15.0")

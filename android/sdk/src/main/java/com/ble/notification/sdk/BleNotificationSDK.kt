@@ -76,6 +76,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 override fun onConnecting() = callback.onConnecting()
                 override fun onRegistering() = callback.onRegistering()
                 override fun onPaired() {
+                    ScanRegistrationManager.register(context)
                     callback.onPaired()
                 }
                 override fun onError(error: SdkError) = callback.onError(error)
@@ -94,6 +95,8 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
     fun unpair(packageName: String) = pairingManager.unpair(packageName)
 
+    fun updatePairedMac(packageName: String, newMac: String) = pairingManager.updateMac(packageName, newMac)
+
     fun sendNotification(title: String, body: String, callback: SendCallback? = null) {
         if (checkClosed(callback)) return
         val packageName = context.packageName
@@ -102,10 +105,16 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 callback?.onError(SdkError.NotPaired())
                 return
             }
+        val baseKey = pairingManager.getBaseKey(packageName)
+            ?: run {
+                callback?.onError(SdkError.NotPaired())
+                return
+            }
 
         BleClient.connect(context, mac, object : ConnectionCallback {
             override fun onReady(gatt: BluetoothGatt) {
                 val frame = FrameEncoder.encodeNotify(
+                    key = baseKey,
                     packageName = packageName,
                     title = title,
                     body = body,

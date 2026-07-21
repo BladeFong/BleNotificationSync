@@ -1,5 +1,34 @@
 # Progress Log
 
+## Session: 2026-07-21 — 通知修复与密钥对齐
+
+- **Status:** Android↔Windows 联调通过，通知三级回退机制就绪
+- **根因定位**：`tauri-plugin-notification` 内部 `let _ = notification.show()` 静默吞掉错误，导致通知失败无任何日志。同时 `notify_rust` 的 WinRT Toast 在未安装应用（无 AUMID）时静默失败。
+- **通知三级回退**：Tauri 跨平台组件 → notify_rust（WinRT Toast / macOS / Linux）→ PowerShell BalloonTip（Windows 兜底），每层失败均有日志输出。
+- **密钥 IKM 对齐**：修复 Android 端 `AesGcmCrypto.encrypt` 使用 `NativeCrypto.deriveKey(packageName)` 导致 IKM 缺失 random 的 bug。改为直接使用注册时存储的 baseKey，与桌面端 `HKDF(salt, packageName+random, L=32)` 对齐。
+- **安全确认**：注册时加 random 确保 baseKey 不可从公开信息（包名+salt）推导，开源后仍安全。
+- **Android SDK 接口变更**：`AesGcmCrypto.encrypt/decrypt` 改为接受 `key: ByteArray` 参数，`FrameEncoder.encodeNotify` 同步新增 `key` 参数，`BleNotificationSDK.sendNotification` 从 `PairingManager.getBaseKey()` 获取密钥传入。
+- **Tauri 通知组件验证**：`tauri-plugin-notification` 在 Windows 上可正常工作（之前失败是密钥不匹配导致通知未到达发送步骤），保留为跨平台首选方案，支持后续 macOS 适配。
+- **编译验证**：桌面端 release + Android demo 均编译通过，Android demo 已安装到手机测试。
+
+## Session: 2026-07-18 — Android-Windows联调成功与通知字段对接
+
+- **Status:** Android 与 Windows 端 BLE 联调成功，解决通知推送与系统通知弹出问题
+- **权限与ROM兼容修复**：定位并解决 Android 12+ BLE 扫描权限在某些 ROM 下被静默过滤的问题，通过在 Android SDK 端补充地址权限请求，成功打通蓝牙扫描，获得 Windows 外设的 BLE 随机 MAC 地址并成功连接。
+- **GATT 框架定位**：确认 Windows 桌面端仍然使用高效可靠的原生 WinRT APIs（通过 `windows` 库直接构建 `GattServiceProvider`），彻底弃用了有广播冲突和参数错误限制的旧兼容组件。
+- **凭据管理器读写修正**：修复了 Windows 凭据管理器（Credential Manager）由于 `cmdkey` 语法不规范（未加冒号且误用 `/add` 域凭据）导致密钥实际写入失败的 Bug（改为 `/generic` 通用凭据和冒号参数）。同时重构了 `get_base_key`，使用基于 C# 互操作调用的 `CredReadW` 原生 API 读取密码，摆脱了对第三方 `Get-StoredCredential` 模块的依赖。
+- **通知解析与跨平台通知插件（tauri-plugin-notification）对接**：修复了双端字段键名不一致（`body` vs `content`）导致 JSON 反序列化失败的 Bug。重构还原了官方的 `tauri-plugin-notification` 系统，采用异步 `tokio::spawn` 执行，并在弹出前动态检测/申请 OS 通知权限；同时针对未签名开发版应用会被 Windows Action Center 静默拦截 Toast 通知的问题，确定了需通过安装包安装（以便由安装程序注册 Start Menu 快捷方式及匹配的 AppUserModelId）或在开发模式下手动添加应用快捷方式的系统规则，同时将通知插件的内部报错直接导出到前端界面日志框以便调试。
+
+## Session: 2026-07-17 — Windows Native WinRT BLE Implementation & Compilation
+
+- **Status:** Windows 原生 WinRT BLE 广播修复并打包成功
+- **GATT 广播修复**：在 Windows 上绕过 `ble-peripheral-rust` 跨平台包装器，直接接入 Windows 原生 UWP/WinRT 接口。
+- **参数错误（0x80070057）解决**：针对 `BluetoothLEAdvertisementPublisher`，将原本失败的 `Create(&adv)` 方式改为使用默认的 `new()` 构造函数，然后向其内部的 `Advertisement` 对象中添加 `Service UUID`。此方式与 C# GATT 实现对齐，完全解决了启动时报错的问题。
+- **广播可见性修复**：同时启动 `GattServiceProvider`（管理 GATT 特征值并接收连接）与 `BluetoothLEAdvertisementPublisher`（在广播包中宣告 UUID 字段），解决 Windows 蓝牙广播不携带 Service UUID 导致客户端无法通过 UUID 过滤扫描到的问题。
+- **生命周期安全保护**：在 `BleState` 中维护 `WindowsBleResources`，防止 provider 和 publisher 相关的 WinRT COM 对象在主函数返回时被析构，保证了 BLE 服务的长效性。
+- **编译器错误解决**：通过对 TypedEventHandler 的声明与注册包裹局部作用域（Block），避免非 `Send` 的 WinRT 代理对象生命周期跨越 `tokio::select!` Await 点引起的 `future cannot be sent between threads safely` 编译报错。
+- **编译打包**：成功在 Windows 侧生成了 release 二进制文件 `ble-notification-sync.exe` 以及 `msi`/`nsis` 安装包。
+
 ## Session: 2026-07-16 — 跨平台 BLE 外设重构
 
 - **Status:** 跨平台 BLE 外设实现完成并编译通过

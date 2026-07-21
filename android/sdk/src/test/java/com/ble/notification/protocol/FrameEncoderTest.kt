@@ -13,6 +13,7 @@ class FrameEncoderTest {
         const val HEADER_SIZE = 5
         const val NONCE_SIZE = 12
         const val AUTH_TAG_SIZE = 16
+        val TEST_KEY = ByteArray(32) { it.toByte() }
     }
 
     // ── REGISTER ─────────────────────────────────────────────────
@@ -52,7 +53,7 @@ class FrameEncoderTest {
 
     @Test
     fun `encodeNotify has correct magic and type`() {
-        val frame = FrameEncoder.encodeNotify("com.example", "Title", "Body", 12345L)
+        val frame = FrameEncoder.encodeNotify(TEST_KEY, "com.example", "Title", "Body", 12345L)
 
         assertEquals(MAGIC_BYTE_0, frame[0])
         assertEquals(MAGIC_BYTE_1, frame[1])
@@ -61,7 +62,7 @@ class FrameEncoderTest {
 
     @Test
     fun `encodeNotify single frame Seq=0 TotalSeq=1`() {
-        val frame = FrameEncoder.encodeNotify("com.example", "T", "B", 0L)
+        val frame = FrameEncoder.encodeNotify(TEST_KEY, "com.example", "T", "B", 0L)
 
         assertEquals(0, frame[3].toInt() and 0xFF)
         assertEquals(1, frame[4].toInt() and 0xFF)
@@ -70,7 +71,7 @@ class FrameEncoderTest {
     @Test
     fun `encodeNotify has PackageLen followed by package name bytes`() {
         val pkg = "com.example.app"
-        val frame = FrameEncoder.encodeNotify(pkg, "Title", "Body", 1000L)
+        val frame = FrameEncoder.encodeNotify(TEST_KEY, pkg, "Title", "Body", 1000L)
 
         val packageLen = frame[5].toInt() and 0xFF
         assertEquals("PackageLen must match package name length", pkg.length, packageLen)
@@ -82,7 +83,7 @@ class FrameEncoderTest {
     @Test
     fun `encodeNotify has 12-byte nonce after package`() {
         val pkg = "com.example"
-        val frame = FrameEncoder.encodeNotify(pkg, "T", "B", 0L)
+        val frame = FrameEncoder.encodeNotify(TEST_KEY, pkg, "T", "B", 0L)
 
         val packageLen = frame[5].toInt() and 0xFF
         val nonceOffset = 6 + packageLen
@@ -98,7 +99,7 @@ class FrameEncoderTest {
     @Test
     fun `encodeNotify ciphertext includes 16-byte auth tag`() {
         val pkg = "com.example"
-        val frame = FrameEncoder.encodeNotify(pkg, "Title", "Body", 12345L)
+        val frame = FrameEncoder.encodeNotify(TEST_KEY, pkg, "Title", "Body", 12345L)
 
         val packageLen = frame[5].toInt() and 0xFF
         val nonceOffset = 6 + packageLen
@@ -113,7 +114,7 @@ class FrameEncoderTest {
     @Test
     fun `encodeNotify total frame size is header plus packageLen plus package plus nonce plus ciphertext`() {
         val pkg = "com.test"
-        val frame = FrameEncoder.encodeNotify(pkg, "Hi", "There", 999L)
+        val frame = FrameEncoder.encodeNotify(TEST_KEY, pkg, "Hi", "There", 999L)
 
         val packageLen = frame[5].toInt() and 0xFF
         val expectedMinSize = HEADER_SIZE + 1 + packageLen + NONCE_SIZE + AUTH_TAG_SIZE
@@ -196,7 +197,7 @@ class FrameEncoderTest {
     @Test
     fun `all message types produce valid magic`() {
         val register = FrameEncoder.encodeRegister("App", "com.test", ByteArray(32))
-        val notify = FrameEncoder.encodeNotify("com.test", "T", "B", 0L)
+        val notify = FrameEncoder.encodeNotify(TEST_KEY, "com.test", "T", "B", 0L)
         val iconData = FrameEncoder.encodeIconData(ByteArray(1), 0, 1)
         val iconEnd = FrameEncoder.encodeIconEnd(0)
 
@@ -209,7 +210,7 @@ class FrameEncoderTest {
     @Test
     fun `all message types have 5-byte header minimum`() {
         val register = FrameEncoder.encodeRegister("A", "com.x", ByteArray(32))
-        val notify = FrameEncoder.encodeNotify("com.x", "T", "B", 0L)
+        val notify = FrameEncoder.encodeNotify(TEST_KEY, "com.x", "T", "B", 0L)
         val iconData = FrameEncoder.encodeIconData(ByteArray(1), 0, 1)
         val iconEnd = FrameEncoder.encodeIconEnd(0)
 

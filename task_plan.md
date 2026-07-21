@@ -54,16 +54,16 @@ Phase 4
 - [x] 实现事件处理（托盘菜单分发）
 - [x] 前端 UI（中英双语、状态显示、日志控制台、扫码绑定）
 - [x] 实现 BLE GATT Server（基于 ble-peripheral-rust 跨平台方案）
-- [ ] 实现通知适配层（Toast/系统通知）
+- [x] 实现通知适配层（Tauri 跨平台组件 → notify_rust → PowerShell 三级回退）
 - [x] 实现 macOS BLE 兼容层（基于 ble-peripheral-rust 实现 macOS 下的广播与服务）
-- **Status:** 进行中（BLE 服务重构就绪，系统通知适配待实现）
+- **Status:** complete（Android↔Windows 联调通过，通知三级回退机制就绪）
 - **原代码：** `../windows/` 为旧 C# .NET WinForms 实现，已废弃
 
 ### Phase 5: 联调测试
-- [ ] Android ↔ Windows 互通测试（含加密）
+- [x] Android ↔ Windows 互通测试（含加密）— 配对+通知同步通过
 - [ ] Android ↔ macOS 互通测试（含加密）
 - [ ] 编写 README 和集成文档
-- **Status:** pending
+- **Status:** 进行中（Windows 联调通过，macOS 待测）
 
 ## Key Questions
 1. ~~图标传输是否需要压缩~~ → 二进制直传，不压缩，最大 60KB

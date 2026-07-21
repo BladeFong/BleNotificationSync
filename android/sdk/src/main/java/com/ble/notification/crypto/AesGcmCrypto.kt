@@ -30,32 +30,30 @@ object AesGcmCrypto {
     }
 
     /**
-     * Encrypt a plaintext using a package-specific AES-GCM key.
+     * Encrypt a plaintext using a pre-derived AES-GCM key.
      *
-     * @param packageName the application package name (used for key derivation)
-     * @param plaintext   the data to encrypt
+     * @param key       32-byte AES key (derived during pairing via HKDF)
+     * @param plaintext the data to encrypt
      * @return [EncryptedPayload] containing nonce and ciphertext
      * @throws IllegalStateException if encryption fails
      */
-    fun encrypt(packageName: String, plaintext: ByteArray): EncryptedPayload {
-        val key = KeyDerivation.deriveKey(packageName)
+    fun encrypt(key: ByteArray, plaintext: ByteArray): EncryptedPayload {
         val nonce = generateNonce()
         val ciphertext = NativeCrypto.aesGcmEncrypt(key, nonce, plaintext)
-            ?: throw IllegalStateException("AES-GCM encryption failed for package: $packageName")
+            ?: throw IllegalStateException("AES-GCM encryption failed")
         return EncryptedPayload(nonce, ciphertext)
     }
 
     /**
-     * Decrypt a ciphertext using a package-specific AES-GCM key.
+     * Decrypt a ciphertext using a pre-derived AES-GCM key.
      *
-     * @param packageName the application package name (used for key derivation)
-     * @param nonce       the 12-byte nonce used during encryption
-     * @param ciphertext  the ciphertext with authentication tag
+     * @param key        32-byte AES key (derived during pairing via HKDF)
+     * @param nonce      the 12-byte nonce used during encryption
+     * @param ciphertext the ciphertext with authentication tag
      * @return decrypted plaintext, or null if authentication fails
      */
-    fun decrypt(packageName: String, nonce: ByteArray, ciphertext: ByteArray): ByteArray? {
+    fun decrypt(key: ByteArray, nonce: ByteArray, ciphertext: ByteArray): ByteArray? {
         require(nonce.size == NONCE_SIZE) { "Nonce must be $NONCE_SIZE bytes, got ${nonce.size}" }
-        val key = KeyDerivation.deriveKey(packageName)
         return NativeCrypto.aesGcmDecrypt(key, nonce, ciphertext)
     }
 

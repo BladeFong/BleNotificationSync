@@ -42,7 +42,7 @@ object FrameDecoder {
         val totalSeq = data[4].toInt() and 0xFF
 
         val payload = if (msgType == MessageType.NOTIFY) {
-            decodeNotifyPayload(data)
+            decodeNotifyPayload(data, null)
         } else {
             val raw = data.sliceArray(HEADER_SIZE until data.size)
             if (raw.isEmpty()) null else raw
@@ -51,17 +51,35 @@ object FrameDecoder {
         return Frame(msgType, seq, totalSeq, payload)
     }
 
-    private fun decodeNotifyPayload(data: ByteArray): ByteArray? {
+    fun decode(data: ByteArray, key: ByteArray?): Frame? {
+        if (data.size < MIN_FRAME_SIZE) return null
+        if (data[0] != MAGIC[0] || data[1] != MAGIC[1]) return null
+
+        val msgType = MessageType.fromValue(data[2]) ?: return null
+        val seq = data[3].toInt() and 0xFF
+        val totalSeq = data[4].toInt() and 0xFF
+
+        val payload = if (msgType == MessageType.NOTIFY) {
+            decodeNotifyPayload(data, key)
+        } else {
+            val raw = data.sliceArray(HEADER_SIZE until data.size)
+            if (raw.isEmpty()) null else raw
+        }
+
+        return Frame(msgType, seq, totalSeq, payload)
+    }
+
+    private fun decodeNotifyPayload(data: ByteArray, key: ByteArray?): ByteArray? {
         if (data.size < HEADER_SIZE + 1 + NONCE_SIZE) return null
 
         val packageLen = data[HEADER_SIZE].toInt() and 0xFF
         if (data.size < HEADER_SIZE + 1 + packageLen + NONCE_SIZE) return null
 
-        val packageName = String(data, HEADER_SIZE + 1, packageLen, Charsets.UTF_8)
         val nonceOffset = HEADER_SIZE + 1 + packageLen
         val nonce = data.sliceArray(nonceOffset until nonceOffset + NONCE_SIZE)
         val ciphertext = data.sliceArray(nonceOffset + NONCE_SIZE until data.size)
 
-        return AesGcmCrypto.decrypt(packageName, nonce, ciphertext)
+        if (key == null) return null
+        return AesGcmCrypto.decrypt(key, nonce, ciphertext)
     }
 }

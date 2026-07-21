@@ -36,13 +36,15 @@ object FrameEncoder {
      *
      * Frame: Header(5) + PackageLen(1) + Package(var) + Nonce(12) + Ciphertext(var)
      *
-     * @param packageName used for key derivation and cleartext Package field
+     * @param key         32-byte AES key (derived during pairing via HKDF)
+     * @param packageName cleartext Package field in the frame
      * @param title notification title
      * @param body notification body
      * @param timestamp event timestamp in millis
      * @return encoded frame bytes
      */
     fun encodeNotify(
+        key: ByteArray,
         packageName: String,
         title: String,
         body: String,
@@ -54,7 +56,7 @@ object FrameEncoder {
             "timestamp" to timestamp.toString()
         )
         val encrypted = AesGcmCrypto.encrypt(
-            packageName,
+            key,
             plaintext.toByteArray(Charsets.UTF_8)
         )
 

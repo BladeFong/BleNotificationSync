@@ -1,6 +1,5 @@
 package com.ble.notification.demo
 
-import android.Manifest
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
@@ -13,11 +12,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.ble.notification.pairing.PairingCallback
 import com.ble.notification.sdk.BleNotificationSDK
+import com.ble.notification.sdk.LogRepository
 import com.ble.notification.sdk.ReminderCallback
 import com.ble.notification.sdk.SdkError
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -27,9 +24,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnUnpair: Button
     private lateinit var etMessage: EditText
     private lateinit var btnSend: Button
+    private lateinit var btnScanOnly: Button
     private lateinit var tvLog: TextView
-
-    private val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -48,33 +44,53 @@ class MainActivity : AppCompatActivity() {
         supportActionBar?.setTitle(R.string.s_app_name)
 
         sdk = BleNotificationSDK.init(this)
+        sdk.registerPermissionLaunchers(this)
         tvLog = findViewById(R.id.tv_log)
 
         btnScanPair = findViewById(R.id.btn_scan_pair)
         btnUnpair = findViewById(R.id.btn_unpair)
         etMessage = findViewById(R.id.et_message)
         btnSend = findViewById(R.id.btn_send)
+        btnScanOnly = findViewById(R.id.btn_scan_only)
 
         btnScanPair.setOnClickListener { startPairing() }
         btnUnpair.setOnClickListener { doUnpair() }
         btnSend.setOnClickListener { doSendReminder() }
+        btnScanOnly.setOnClickListener { doScanOnly() }
+        findViewById<Button>(R.id.btn_clear_log).setOnClickListener {
+            LogRepository.clear(this)
+            tvLog.text = "日志：等待操作…"
+        }
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 0x7200_0002)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 幂等方法：检查所有权限（BLE + 位置），从系统设置返回时会重新申请
+        sdk.ensurePermissions(this)
+
+        // 恢复缓存日志
+        val cached = LogRepository.getAll(this)
+        if (cached.isNotEmpty()) {
+            tvLog.text = cached
         }
 
         updateButtonStates()
     }
 
     private fun log(msg: String) {
-        val ts = sdf.format(Date())
-        val line = "$ts $msg\n"
-        runOnUiThread { tvLog.append(line) }
+        LogRepository.append(this, msg)
+        runOnUiThread {
+            tvLog.append("$msg\n")
+        }
     }
 
     private fun startPairing() {
         log("开始扫描绑定…")
-        sdk.startPairing(this, "BLE通知测试", object : PairingCallback {
+        sdk.startPairing(this, getString(R.string.s_app_display_name), object : PairingCallback {
             override fun onScanSuccess() {
                 // logged in onQrResult above
             }
@@ -104,8 +120,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun doUnpair() {
         sdk.unpair(packageName)
-        log("已解除绑定")
-        Toast.makeText(this, "已解除绑定", Toast.LENGTH_SHORT).show()
+        val msg = getString(R.string.s_unpaired)
+        log(msg)
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         updateButtonStates()
     }
 
@@ -126,7 +143,7 @@ class MainActivity : AppCompatActivity() {
         log("设置闹钟: $message")
         sdk.setReminder(
             taskId = "demo_${System.currentTimeMillis()}",
-            title = "BLE 通知测试",
+            title = getString(R.string.s_notify_title),
             body = message,
             triggerAt = triggerAt,
             callback = object : ReminderCallback {
@@ -139,6 +156,53 @@ class MainActivity : AppCompatActivity() {
                 override fun onSynced(taskId: String, success: Boolean) {}
             }
         )
+    }
+
+    private fun doScanOnly() {
+        val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+        if (bluetoothAdapter == null) {
+            android.util.Log.e("BleClient", "Activity: 蓝牙不可用")
+            return
+        }
+        if (!bluetoothAdapter.isEnabled) {
+            android.util.Log.e("BleClient", "Activity: 蓝牙未开启")
+            return
+        }
+
+        val scanner = bluetoothAdapter.bluetoothLeScanner
+        android.util.Log.d("BleClient", "Activity: scanner=$scanner")
+        if (scanner == null) {
+            android.util.Log.e("BleClient", "Activity: Scanner 不可用")
+            return
+        }
+
+        val settings = android.bluetooth.le.ScanSettings.Builder()
+            .setScanMode(android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
+        var count = 0
+        val callback = object : android.bluetooth.le.ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: android.bluetooth.le.ScanResult) {
+                count++
+                android.util.Log.d("BleClient", "Activity Scan hit #${count}: ${result.device.address} name=${result.device.name} rssi=${result.rssi}")
+            }
+            override fun onBatchScanResults(results: MutableList<android.bluetooth.le.ScanResult>?) {
+                android.util.Log.d("BleClient", "Activity onBatchScanResults: ${results?.size ?: 0} results")
+            }
+            override fun onScanFailed(errorCode: Int) {
+                android.util.Log.e("BleClient", "Activity Scan failed: errorCode=$errorCode")
+            }
+        }
+
+        android.util.Log.d("BleClient", "Activity: 开始前台扫描 (10秒)...")
+        btnScanOnly.isEnabled = false
+        scanner.startScan(null, settings, callback)
+
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            scanner.stopScan(callback)
+            btnScanOnly.isEnabled = true
+            android.util.Log.d("BleClient", "Activity: 扫描结束，共扫到 $count 个设备")
+        }, 10_000)
     }
 
     private fun updateButtonStates() {

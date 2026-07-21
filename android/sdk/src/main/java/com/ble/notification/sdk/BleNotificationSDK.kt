@@ -2,8 +2,11 @@ package com.ble.notification.sdk
 
 import android.bluetooth.BluetoothGatt
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.FragmentActivity
 import com.ble.notification.ble.BleClient
@@ -32,11 +35,13 @@ class BleNotificationSDK private constructor(private val context: Context) {
     private val reminderCallbacks = mutableMapOf<String, ReminderCallback>()
     @Volatile private var closed = false
 
+    // 两段式位置权限 Launcher
+    private var foregroundLocationLauncher: ActivityResultLauncher<String>? = null
+    private var backgroundLocationLauncher: ActivityResultLauncher<String>? = null
+
     companion object {
         @Volatile
         private var instance: BleNotificationSDK? = null
-
-        private const val REQUEST_CODE_BLE_PERMISSIONS = 0x7100_0001
 
         fun init(context: Context): BleNotificationSDK {
             return instance ?: synchronized(this) {
@@ -52,16 +57,79 @@ class BleNotificationSDK private constructor(private val context: Context) {
         }
     }
 
+    /**
+     * 注册位置权限 Launcher。**必须在 Activity.onCreate() 中调用。**
+     *
+     * registerForActivityResult 要求在 Activity 进入 STARTED 状态前调用。
+     */
+    fun registerPermissionLaunchers(activity: FragmentActivity) {
+        foregroundLocationLauncher = activity.registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            if (granted) requestBackgroundLocation()
+        }
+
+        backgroundLocationLauncher = activity.registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            android.util.Log.d("BleSDK", "后台位置权限回调: granted=$granted")
+        }
+    }
+
+    /**
+     * 统一检查 SDK 所需的所有权限。**在 Activity.onResume() 中调用。**
+     *
+     * 幂等方法，内部自行判断：
+     * 1. BLE 权限 → 缺失则请求
+     * 2. FINE_LOCATION → 缺失则触发两段式第一段
+     * 3. BACKGROUND_LOCATION → FINE 有但 BG 缺失则触发第二段
+     * 4. 都已就绪 → 无操作
+     */
+    fun ensurePermissions(activity: FragmentActivity) {
+        // 1. BLE 权限
+        val missingBle = BleClient.getMissingPermissions(context)
+        if (missingBle.isNotEmpty()) {
+            ActivityCompat.requestPermissions(activity, missingBle, 0x7100_0001)
+            return
+        }
+
+        // 2. 位置权限（Android 10+）
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        if (foregroundLocationLauncher == null) return
+
+        val bgGranted = ActivityCompat.checkSelfPermission(
+            activity, android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (bgGranted) return
+
+        val fineGranted = ActivityCompat.checkSelfPermission(
+            activity, android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!fineGranted) {
+            foregroundLocationLauncher?.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            return
+        }
+
+        requestBackgroundLocation()
+    }
+
+    private fun requestBackgroundLocation() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        if (backgroundLocationLauncher == null) return
+
+        val bgGranted = ActivityCompat.checkSelfPermission(
+            context, android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (bgGranted) return
+
+        backgroundLocationLauncher?.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    }
+
+    // ── 配对流程 ──
+
     fun startPairing(activity: FragmentActivity, appName: String, callback: PairingCallback) {
         if (checkClosed(callback)) return
         val packageName = context.packageName
-
-        // Check BLE permissions before opening scanner
-        val missing = BleClient.getMissingPermissions(context)
-        if (missing.isNotEmpty()) {
-            ActivityCompat.requestPermissions(activity, missing, REQUEST_CODE_BLE_PERMISSIONS)
-            return
-        }
 
         val fragment = QrScannerFragment.newInstance { qrResult ->
             if (qrResult == null) {
@@ -76,7 +144,6 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 override fun onConnecting() = callback.onConnecting()
                 override fun onRegistering() = callback.onRegistering()
                 override fun onPaired() {
-                    ScanRegistrationManager.register(context)
                     callback.onPaired()
                 }
                 override fun onError(error: SdkError) = callback.onError(error)
@@ -89,6 +156,8 @@ class BleNotificationSDK private constructor(private val context: Context) {
             .commit()
     }
 
+    // ── 设备管理 ──
+
     fun isPaired(packageName: String): Boolean = pairingManager.isPaired(packageName)
 
     fun getPairedDevices(): List<PairedDevice> = pairingManager.getPairedDevices()
@@ -96,6 +165,8 @@ class BleNotificationSDK private constructor(private val context: Context) {
     fun unpair(packageName: String) = pairingManager.unpair(packageName)
 
     fun updatePairedMac(packageName: String, newMac: String) = pairingManager.updateMac(packageName, newMac)
+
+    // ── 通知发送 ──
 
     fun sendNotification(title: String, body: String, callback: SendCallback? = null) {
         if (checkClosed(callback)) return
@@ -147,6 +218,8 @@ class BleNotificationSDK private constructor(private val context: Context) {
         })
     }
 
+    // ── 闹钟 ──
+
     fun setReminder(
         taskId: String,
         title: String,
@@ -172,6 +245,8 @@ class BleNotificationSDK private constructor(private val context: Context) {
         callback?.onTriggered(taskId)
         callback?.onSynced(taskId, success)
     }
+
+    // ── 生命周期 ──
 
     fun close() {
         closed = true

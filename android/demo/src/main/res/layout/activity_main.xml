@@ -78,6 +78,36 @@
                 android:layout_width="match_parent"
                 android:layout_height="12dp" />
 
+            <Button
+                android:id="@+id/btn_scan_only"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="扫描 BLE 设备 (10秒)" />
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <Button
+                    android:id="@+id/btn_clear_log"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/s_clear_log"
+                    android:minHeight="32dp"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
             <ScrollView
                 android:layout_width="match_parent"
                 android:layout_height="120dp"

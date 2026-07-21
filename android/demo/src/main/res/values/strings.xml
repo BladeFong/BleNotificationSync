@@ -5,4 +5,8 @@
     <string name="s_unpair">解除绑定</string>
     <string name="s_send_reminder">发送提醒 (10秒后)</string>
     <string name="s_default_text">测试通知消息</string>
+    <string name="s_app_display_name">BLE通知测试</string>
+    <string name="s_unpaired">已解除绑定</string>
+    <string name="s_notify_title">BLE 通知测试</string>
+    <string name="s_clear_log">清空日志</string>
 </resources>

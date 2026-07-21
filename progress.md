@@ -1,5 +1,26 @@
 # Progress Log
 
+## Session: 2026-07-21 — SDK 权限 API 重构 + BLE 后台扫描排查
+
+- **Status:** 权限 API 重构完成，BLE 后台扫描问题待最终验证
+- **SDK 权限 API 重构**：
+  - `registerPermissionLaunchers(activity)`：onCreate 注册两段式位置权限 Launcher
+  - `ensurePermissions(activity)`：onResume 统一检查 BLE + 位置所有权限，幂等方法
+  - `startPairing`：移除权限逻辑，纯业务流程
+  - 两段式位置权限：先 FINE_LOCATION（用户选"仅使用时允许"），再 BACKGROUND_LOCATION（用户选"始终允许"），使用 `registerForActivityResult` 异步接力
+- **BLE 后台扫描排查**：
+  - 前台服务类型改为 `connectedDevice|location`（参考 MetaRadar 项目）
+  - 添加 `FOREGROUND_SERVICE_LOCATION` + `ACCESS_BACKGROUND_LOCATION` 权限
+  - 旧权限 `BLUETOOTH`/`BLUETOOTH_ADMIN` 加 `maxSdkVersion="30"`
+  - `connectWithScan` 加 GPS 总开关检查日志
+  - 扫描回调改为成员变量防止 GC
+- **Demo 应用**：
+  - `onCreate` 调用 `sdk.registerPermissionLaunchers(this)`
+  - `onResume` 调用 `sdk.ensurePermissions(this)`（幂等）
+  - 新增"扫描 BLE 设备"按钮用于前台调试
+- **BLE MAC 行为确认**：Windows/macOS 广播地址随时可能变化，Android 端必须始终用 UUID 扫描
+- **MetaRadar 参考**：前台服务需声明 `CONNECTED_DEVICE|LOCATION` 类型才能后台 BLE 扫描
+
 ## Session: 2026-07-21 — 通知修复与密钥对齐
 
 - **Status:** Android↔Windows 联调通过，通知三级回退机制就绪

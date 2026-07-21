@@ -5,8 +5,8 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- BLE -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -14,6 +14,11 @@
 
     <!-- Notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <application>
         <receiver
@@ -23,5 +28,10 @@
                 <action android:name="com.ble.notification.sdk.ACTION_ALARM_TRIGGER" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name="com.ble.notification.sdk.BleForegroundService"
+            android:foregroundServiceType="connectedDevice|location"
+            android:exported="false" />
     </application>
 </manifest>

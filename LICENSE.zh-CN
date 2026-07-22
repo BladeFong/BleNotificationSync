@@ -1,0 +1,26 @@
+# Apache License 2.0 中文参考译本
+
+> 本文档为 Apache License 2.0 的中文参考译本，不具备法律效力。
+> 法律上有效的协议文本为项目根目录下的 [LICENSE](LICENSE) 文件（英文原文）。
+
+---
+
+## 专利声明
+
+本软件实现了一种基于 GATT 的 BLE 通知帧跨平台通知同步方法。版权方已就该
+方法提交或正在准备专利申请。
+
+使用本软件本身**不**授予超出 Apache 2.0 第 3 条范围的 GATT 通知同步方法
+专利许可。实现该方法的商业或衍生产品可能需要另行取得专利权人的专利授权。
+
+## 第三方声明
+
+本项目包含以下第三方开源软件：
+
+- **libtomcrypt** (https://github.com/libtom/libtomcrypt)
+  协议：Public domain / Unlicense
+  详见：third_party/libtomcrypt/LICENSE
+
+- **libtommath** (https://github.com/libtom/libtommath)
+  协议：Public domain / Unlicense
+  详见：third_party/libtommath/LICENSE

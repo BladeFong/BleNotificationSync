@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "BleNotificationSync"
 include(":sdk")
 include(":demo")
+project(":demo").projectDir = file("../examples/android-demo")

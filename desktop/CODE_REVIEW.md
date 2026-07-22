@@ -9,8 +9,9 @@
 ### 🔴 严重问题
 
 1. **命令注入风险** (`config.rs:103-147`)
-   - ✅ **已修复**：PS 脚本改用 `$args[0]` 参数化传递 target
-   - 修复内容：`[Cred]::Get('{}')` → `[Cred]::Get($args[0])`，通过 `-args` 参数传递
+   - ⚠️ **部分修复**：`$args[0]` 参数化在 Rust + PowerShell 组合中不起作用（`-args` 被解释为脚本一部分）
+   - 当前方案：保留字符串拼接，添加安全注释（输入字符受限：device_id=十六进制，package=包名字符）
+   - 结论：当前场景安全，但 `$args` 方案不可行
 
 2. **XSS 风险** (`main.js:22`)
    - ✅ **已修复**：`innerHTML` 改为 `textContent` + `createTextNode`

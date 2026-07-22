@@ -98,10 +98,10 @@ pairBtn.addEventListener('click', () => {
         qrContainer.querySelector('svg').style.width = '200px';
         qrContainer.querySelector('svg').style.height = '200px';
 
-        addLog(`${isChinese ? '显示绑定二维码' : 'Showing pairing QR code'}: ${mac} (${name})`);
+        addLog(`${isChinese ? '显示绑定二维码' : 'Showing pairing QR code'}: ${name}`);
     }).catch(error => {
-        const macDisplay = document.getElementById('macDisplay');
-        if (macDisplay) macDisplay.textContent = `${isChinese ? '获取失败' : 'Failed'}: ${error}`;
+        const pcNameDisplay = document.getElementById('pcNameDisplay');
+        if (pcNameDisplay) pcNameDisplay.textContent = `${isChinese ? '获取失败' : 'Failed'}: ${error}`;
         addLog(`${isChinese ? '获取设备信息失败' : 'Failed to get device info'}: ${error}`);
     });
 });

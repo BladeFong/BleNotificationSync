@@ -64,16 +64,28 @@ class BleForegroundService : Service() {
             override fun onReady(gatt: android.bluetooth.BluetoothGatt) {
                 val sdk = try { BleNotificationSDK.init(applicationContext) } catch (_: Exception) { stopSelf(); return }
                 val pm = PairingManager(applicationContext)
-                val baseKey = pm.getBaseKey(applicationContext.packageName) ?: run { stopSelf(); return }
+                val devices = pm.getPairedDevices()
+                val baseKey = devices.firstOrNull()?.let { pm.getBaseKey(it.uuid) } ?: run {
+                    android.util.Log.e("BleClient", "BleForegroundService: 未找到配对设备的密钥")
+                    stopSelf()
+                    return
+                }
 
                 val frame = FrameEncoder.encodeNotify(baseKey, applicationContext.packageName, title, body, System.currentTimeMillis())
                 val service = gatt.getService(BleClient.SERVICE_UUID)
                 val characteristic = service?.getCharacteristic(BleClient.WRITE_CHARACTERISTIC_UUID)
-                if (characteristic == null) { gatt.close(); stopSelf(); return }
+                if (characteristic == null) {
+                    android.util.Log.e("BleClient", "BleForegroundService: 特征值未找到")
+                    gatt.close()
+                    stopSelf()
+                    return
+                }
                 characteristic.value = frame
-                gatt.writeCharacteristic(characteristic)
+                val sent = gatt.writeCharacteristic(characteristic)
+                android.util.Log.d("BleClient", "BleForegroundService: writeCharacteristic sent=$sent")
                 sdk.notifySynced(taskId, true)
                 Handler(Looper.getMainLooper()).postDelayed({ gatt.close(); stopSelf() }, 3000)
+
             }
 
             override fun onError(error: SdkError) {

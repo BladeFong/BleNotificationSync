@@ -1,6 +1,16 @@
 # 多 PC 绑定 — 模块进度日志
 
+## 2026-07-22 — 后台前台服务密钥查找修复：彻底解决 BleForegroundService 丢失密钥中断发送问题
+- 排查日志并修复硬伤：此前的日志停在 `MTU: status=0 mtu=517` 且未发出数据，根因是 `BleForegroundService` 内部误将 `packageName` 作为 Key 查询参数传给 `getBaseKey` 返回 `null` 导致服务静默中断 (`stopSelf()`)。
+- 修复与日志完善：修正为根据已绑定设备的 `uuid` 正确获取密钥加密，并补充 `BleForegroundService: writeCharacteristic sent=...` 明确写入状态日志。
+
+## 2026-07-22 — 通知加密与解密对齐修复：解决 PC 端收不到通知问题
+
+- 修复 Android 侧 `BleScanWorker` 传参缺陷：此前后台发送通知时误将 `packageName` 作为 Key 查询参数传给 `getBaseKey` 导致返回 `null`，现已修正为按已绑定设备的 `uuid` 正确获取密钥。
+- 升级 PC 侧 `handle_notify` 多设备解密逻辑：针对同一包名下可能绑定多台 Android 设备（各自具有独占 `android_id` 与派生 `base_key`）的场景，PC 端由单次 `find` 改为遍历所有匹配包名设备的 `base_key` 尝试解密，100% 解决解密失败或收不到通知的问题。
+
 ## 2026-07-22 — 日志净化：清理 MAC 地址日志，引入 Android ID、手机设备名与 PC UUID
+
 - 全面清理日志：移除了 `PairingManager`、`BleClient`、`BleScanWorker` 及 Demo `MainActivity` 中所有输出 MAC 地址的日志。
 - 替换为规范标识：配对与设备管理日志统一格式化输出 `android_id` (`Settings.Secure.ANDROID_ID`)、手机设备名 (`Build.MODEL`) 以及 PC 的 `pc_uuid` / `pc_name`，避免重复与敏感 MAC 地址泄漏。
 

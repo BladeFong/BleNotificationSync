@@ -8,6 +8,7 @@
   - 扫码绑定对话框只显示 PC 设备名，不再显示 MAC
   - REGISTER 消息支持可选的 `android_id` 和 `device_name` 字段（向后兼容）
   - 密钥存储使用 `device_id` 作为标识
+  - QR 码格式移除 `mac=` 参数
 - **涉及文件**：
   - `ble.rs`：handle_register、handle_notify、sync_to_config、DeviceInfo
   - `storage.rs`：PairedDevice 结构体、add/remove/get_paired_device

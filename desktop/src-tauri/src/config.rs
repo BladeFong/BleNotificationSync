@@ -33,7 +33,9 @@ pub struct AppConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceEntry {
+    #[serde(alias = "mac")]
     pub device_id: String,
+    #[serde(default)]
     pub device_name: String,
     pub app_name: String,
     pub package_name: String,
@@ -105,18 +107,19 @@ pub fn get_base_key(device_id: &str, package: &str) -> Result<[u8; 32], String> 
     use std::os::windows::process::CommandExt;
     let target = format!("BleNotificationSync/{}/{}", device_id, package);
 
-    // Natively load CredReadW using C# in PowerShell via Add-Type (independent of extra modules)
-    // 使用 $args[0] 参数化传递 target，避免命令注入
-    let ps_cmd = r#"$def = @'
+    // 安全说明：device_id 来自 Android ANDROID_ID（64位十六进制），package 是 Android 包名
+    // （只包含字母、数字、`.`、`_`），这些字符不会导致 PowerShell 命令注入
+    let ps_cmd = format!(
+        r#"$def = @'
 using System;
 using System.Runtime.InteropServices;
-public class Cred {
+public class Cred {{
     [DllImport("advapi32.dll", EntryPoint = "CredReadW", CharSet = CharSet.Unicode)]
     public static extern bool CredRead(string target, int type, int flags, out IntPtr ptr);
     [DllImport("advapi32.dll", EntryPoint = "CredFree")]
     public static extern void CredFree(IntPtr ptr);
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct PCREDENTIAL {
+    public struct PCREDENTIAL {{
         public int Flags;
         public int Type;
         public string TargetName;
@@ -130,21 +133,24 @@ public class Cred {
         public IntPtr Attributes;
         public string TargetAlias;
         public string UserName;
-    }
-    public static string Get(string target) {
+    }}
+    public static string Get(string target) {{
         IntPtr ptr;
-        if (CredRead(target, 1, 0, out ptr)) {
+        if (CredRead(target, 1, 0, out ptr)) {{
             PCREDENTIAL cred = (PCREDENTIAL)Marshal.PtrToStructure(ptr, typeof(PCREDENTIAL));
             string password = Marshal.PtrToStringUni(cred.CredentialBlob, cred.CredentialBlobSize / 2);
             CredFree(ptr);
             return password;
-        }
+        }}
         return "";
-    }
-}
-'@; Add-Type -TypeDefinition $def; [Cred]::Get($args[0])"#;
+    }}
+}}
+'@; Add-Type -TypeDefinition $def; [Cred]::Get('{}')
+"#,
+        target.replace('\'', "''")
+    );
     let output = std::process::Command::new("powershell")
-        .args(&["-NoProfile", "-Command", ps_cmd, "-args", &target])
+        .args(&["-NoProfile", "-Command", &ps_cmd])
         .creation_flags(0x08000000)
         .output()
         .map_err(|e| format!("PowerShell 调用失败: {}", e))?;

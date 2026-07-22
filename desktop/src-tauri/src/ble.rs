@@ -145,7 +145,9 @@ async fn handle_register(app_handle: &AppHandle, payload: &[u8]) {
         }
     }
     sync_to_config(&storage_state);
-    let _ = config::store_base_key(&device_id, &data.package, &base_key);
+    if let Err(e) = config::store_base_key(&device_id, &data.package, &base_key) {
+        let _ = app_handle.emit("log-message", format!("密钥存储失败: {}", e));
+    }
 
     let _ = app_handle.emit("log-message",
         format!("设备已绑定: {} [{}] ({})", data.app_name, data.package, device_name));
@@ -173,22 +175,37 @@ async fn handle_notify(app_handle: &AppHandle, payload: &[u8]) {
     let _ = app_handle.emit("log-message", format!("解析包名: {}, Nonce 长度: {}, 密文长度: {}", package, nonce.len(), ciphertext.len()));
 
     let storage_state = app_handle.state::<storage::StorageState>();
-    let device_id = {
+    let matching_device_ids: Vec<String> = {
         let devices = storage_state.devices.lock().unwrap();
-        devices.iter().find(|(_, d)| d.package_name == package).map(|(id, _)| id.clone())
+        devices.iter()
+            .filter(|(_, d)| d.package_name == package)
+            .map(|(id, _)| id.clone())
+            .collect()
     };
-    let device_id = match device_id {
-        Some(id) => id,
-        None => { let _ = app_handle.emit("log-message", format!("未找到设备: {}", package)); return; }
+
+    if matching_device_ids.is_empty() {
+        let _ = app_handle.emit("log-message", format!("未找到包名为 {} 的已绑定设备", package));
+        return;
+    }
+
+    let mut decrypted_plaintext: Option<Vec<u8>> = None;
+    for dev_id in &matching_device_ids {
+        if let Ok(base_key) = config::get_base_key(dev_id, &package) {
+            if let Ok(plaintext) = crypto::decrypt(&base_key, nonce, ciphertext) {
+                decrypted_plaintext = Some(plaintext);
+                break;
+            }
+        }
+    }
+
+    let plaintext = match decrypted_plaintext {
+        Some(p) => p,
+        None => {
+            let _ = app_handle.emit("log-message", format!("解密失败: 尝试了 {} 个匹配设备的密钥均失败", matching_device_ids.len()));
+            return;
+        }
     };
-    let base_key = match config::get_base_key(&device_id, &package) {
-        Ok(k) => k,
-        Err(e) => { let _ = app_handle.emit("log-message", format!("获取密钥失败: {}", e)); return; }
-    };
-    let plaintext = match crypto::decrypt(&base_key, nonce, ciphertext) {
-        Ok(p) => p,
-        Err(e) => { let _ = app_handle.emit("log-message", format!("解密失败: {}", e)); return; }
-    };
+
     match String::from_utf8(plaintext) {
         Ok(json_str) => {
             #[derive(serde::Deserialize)]

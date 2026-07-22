@@ -111,12 +111,14 @@ class BleScanWorker(
             BleClient.connect(applicationContext, mac, object : com.ble.notification.ble.ConnectionCallback {
                 override fun onReady(gatt: android.bluetooth.BluetoothGatt) {
                     val pm = PairingManager(applicationContext)
-                    val baseKey = pm.getBaseKey(applicationContext.packageName)
+                    val devices = pm.getPairedDevices()
+                    val baseKey = devices.firstOrNull()?.let { pm.getBaseKey(it.uuid) }
                     if (baseKey == null) {
                         gatt.close()
                         if (cont.isActive) cont.resume(false)
                         return
                     }
+
 
                     val frame = FrameEncoder.encodeNotify(
                         baseKey, applicationContext.packageName, title, body, System.currentTimeMillis()

@@ -300,6 +300,7 @@ dependencies = [
  "chrono",
  "hex",
  "hkdf",
+ "notify-rust",
  "rand 0.8.7",
  "serde",
  "serde_json",

@@ -79,7 +79,7 @@
 
 - `app_name`：APP 显示名称（来自 SDK 调用参数）
 - `package`：Android 包名（来自 `context.packageName`）
-- `random`：Android 生成的 32 字节随机数，base64 编码。用于密钥派生，双方各自 `HKDF(package+random) → baseKey` 后持久化
+- `random`：Android 生成的 32 字节随机数，**十六进制字符串**（小写，64 字符）。用于密钥派生，双方各自 `HKDF(package+random) → baseKey` 后持久化
 
 #### NOTIFY
 

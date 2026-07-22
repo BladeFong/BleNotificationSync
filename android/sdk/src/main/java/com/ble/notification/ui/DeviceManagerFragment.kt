@@ -93,11 +93,17 @@ class DeviceManagerFragment : Fragment() {
     private fun getHostPrimaryColor(context: Context): Color {
         val typedValue = TypedValue()
         val theme = context.theme
-        return if (theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)) {
-            Color(typedValue.data)
-        } else {
-            Color(0xFF1E88E5)
+        val hasColor = theme.resolveAttribute(androidx.appcompat.R.attr.colorPrimary, typedValue, true) ||
+                theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
+
+        if (hasColor && typedValue.data != 0) {
+            val color = Color(typedValue.data)
+            val luminance = 0.299f * color.red + 0.587f * color.green + 0.114f * color.blue
+            if (luminance < 0.85f) {
+                return color
+            }
         }
+        return Color(0xFF1565C0) // 经典 Material 深蓝色 (Deep Blue)
     }
 }
 
@@ -110,16 +116,30 @@ fun DeviceManagerScreen(
     val pairedDevices by sdk.pairedDevicesState.collectAsState(initial = emptyList())
     var deviceToUnpair by remember { mutableStateOf<PairedDevice?>(null) }
 
+    val primaryColor = MaterialTheme.colors.primary
+    val onPrimaryColor = MaterialTheme.colors.onPrimary
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("已关联 PC 设备", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        "已关联 PC 设备",
+                        fontWeight = FontWeight.Bold,
+                        color = onPrimaryColor
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回",
+                            tint = onPrimaryColor
+                        )
                     }
                 },
-                backgroundColor = MaterialTheme.colors.surface,
+                backgroundColor = primaryColor,
+                contentColor = onPrimaryColor,
                 elevation = 4.dp
             )
         },
@@ -196,7 +216,7 @@ fun DeviceCard(
             .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp)),
         shape = RoundedCornerShape(8.dp),
         backgroundColor = MaterialTheme.colors.surface,
-        elevation = 1.dp
+        elevation = 2.dp
     ) {
         Row(
             modifier = Modifier
@@ -260,14 +280,14 @@ fun EmptyStateView() {
         Text(
             text = "暂无绑定的 PC 设备",
             fontSize = 16.sp,
-            color = Color.Gray,
+            color = Color(0xFF424242),
             fontWeight = FontWeight.Medium
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "点击下方按钮扫描 PC 端二维码进行关联",
             fontSize = 13.sp,
-            color = Color.LightGray
+            color = Color.Gray
         )
     }
 }
@@ -296,7 +316,10 @@ fun BottomBarContent(onAddDeviceClick: () -> Unit) {
                     .fillMaxWidth()
                     .height(48.dp),
                 shape = RoundedCornerShape(6.dp),
-                colors = ButtonDefaults.buttonColors(backgroundColor = MaterialTheme.colors.primary)
+                colors = ButtonDefaults.buttonColors(
+                    backgroundColor = MaterialTheme.colors.primary,
+                    contentColor = MaterialTheme.colors.onPrimary
+                )
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -305,14 +328,14 @@ fun BottomBarContent(onAddDeviceClick: () -> Unit) {
                     Icon(
                         imageVector = Icons.Default.QrCodeScanner,
                         contentDescription = "Scan",
-                        tint = Color.White,
+                        tint = MaterialTheme.colors.onPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "扫描二维码绑定新设备",
                         fontSize = 15.sp,
-                        color = Color.White,
+                        color = MaterialTheme.colors.onPrimary,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -320,3 +343,4 @@ fun BottomBarContent(onAddDeviceClick: () -> Unit) {
         }
     }
 }
+

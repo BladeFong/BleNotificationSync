@@ -121,28 +121,35 @@ fun DeviceManagerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "已关联 PC 设备",
-                        fontWeight = FontWeight.Bold,
-                        color = onPrimaryColor
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            tint = onPrimaryColor
-                        )
-                    }
-                },
-                backgroundColor = primaryColor,
-                contentColor = onPrimaryColor,
+            Surface(
+                color = primaryColor,
                 elevation = 4.dp
-            )
+            ) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            "已关联 PC 设备",
+                            fontWeight = FontWeight.Bold,
+                            color = onPrimaryColor
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回",
+                                tint = onPrimaryColor
+                            )
+                        }
+                    },
+                    backgroundColor = Color.Transparent,
+                    contentColor = onPrimaryColor,
+                    elevation = 0.dp,
+                    modifier = Modifier.statusBarsPadding()
+                )
+            }
         },
+
         bottomBar = {
             BottomBarContent(onAddDeviceClick = onAddDeviceClick)
         }
@@ -296,13 +303,15 @@ fun EmptyStateView() {
 fun BottomBarContent(onAddDeviceClick: () -> Unit) {
     Surface(
         elevation = 8.dp,
-        color = MaterialTheme.colors.surface
+        color = MaterialTheme.colors.surface,
+        modifier = Modifier.navigationBarsPadding()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
+
             Text(
                 text = "提示：扫描 PC 端客户端显示的 BLE 配对二维码即可完成绑定",
                 fontSize = 12.sp,

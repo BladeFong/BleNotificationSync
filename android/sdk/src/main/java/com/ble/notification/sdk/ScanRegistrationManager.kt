@@ -25,8 +25,9 @@ object ScanRegistrationManager {
         // 从已配对设备读取设备名，用作 PendingIntent 扫描过滤
         val pairingManager = com.ble.notification.pairing.PairingManager(context.applicationContext)
         val deviceName = pairingManager.getPairedDevices()
-            .mapNotNull { pairingManager.getDeviceName(it.packageName) }
+            .map { it.name }
             .firstOrNull { it.isNotEmpty() }
+
         if (deviceName == null) {
             android.util.Log.w("BleClient", "No device name saved, skip background scan registration")
             return

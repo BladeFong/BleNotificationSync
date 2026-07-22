@@ -104,8 +104,9 @@ object BleClient {
         // Android 14 后台扫描必须带非空 ScanFilter，用设备名过滤
         val deviceNames = com.ble.notification.pairing.PairingManager(context.applicationContext)
             .getPairedDevices()
-            .mapNotNull { com.ble.notification.pairing.PairingManager(context.applicationContext).getDeviceName(it.packageName) }
+            .map { it.name }
             .filter { it.isNotEmpty() }
+
 
         val filters: MutableList<android.bluetooth.le.ScanFilter> = mutableListOf()
         for (name in deviceNames) {

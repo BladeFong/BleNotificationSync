@@ -19,15 +19,9 @@ class ScanResultReceiver : BroadcastReceiver() {
         val sdk = try { BleNotificationSDK.init(context.applicationContext) }
                   catch (_: Exception) { return }
 
-        // 遍历所有已配对设备，找到已配对但 MAC 变化的，更新
-        for (paired in sdk.getPairedDevices()) {
-            if (paired.mac != newMac) {
-                val oldMac = paired.mac
-                sdk.updatePairedMac(paired.packageName, newMac)
-                val msg = "MAC 更新: ${paired.packageName} $oldMac → $newMac"
-                android.util.Log.d("BleClient", msg)
-                LogRepository.append(context.applicationContext, msg)
-            }
-        }
+        val msg = "后台 BLE 扫描匹配设备: ${device.name ?: "Unknown"} (${device.address})"
+        android.util.Log.d("BleClient", msg)
+        LogRepository.append(context.applicationContext, msg)
+
     }
 }

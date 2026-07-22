@@ -71,44 +71,61 @@ pub fn save_config(config: &AppConfig) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| format!("写入配置失败: {}", e))
 }
 
-/// 创建 keyring 条目
-fn create_keyring_entry(device_id: &str, package: &str) -> Result<keyring::Entry, String> {
-    let service = "ble-notification-sync";
-    let username = format!("{}:{}", device_id, package);
-    keyring::Entry::new(service, &username)
-        .map_err(|e| format!("创建 keyring 条目失败: {}", e))
-}
-
 /// 存储 baseKey 到系统安全存储
 /// Windows: Credential Manager, macOS: Keychain, Linux: Secret Service
 pub fn store_base_key(device_id: &str, package: &str, key: &[u8; 32]) -> Result<(), String> {
-    let entry = create_keyring_entry(device_id, package)?;
     let key_hex = hex::encode(key);
+    let service = "ble-notification-sync";
+    let username = format!("{}:{}", device_id, package);
+    
+    eprintln!("[KEYRING] 存储密钥: service={}, username={}", service, username);
+    
+    let entry = keyring::Entry::new(service, &username)
+        .map_err(|e| format!("创建 keyring 条目失败: {:?}", e))?;
+    
     entry.set_password(&key_hex)
-        .map_err(|e| format!("存储密钥失败: {}", e))
+        .map_err(|e| format!("存储密钥失败: {:?}", e))
 }
 
 /// 从系统安全存储读取 baseKey
 pub fn get_base_key(device_id: &str, package: &str) -> Result<[u8; 32], String> {
-    let entry = create_keyring_entry(device_id, package)?;
-    let key_hex = entry.get_password()
-        .map_err(|e| format!("获取密钥失败: {}", e))?;
+    let service = "ble-notification-sync";
+    let username = format!("{}:{}", device_id, package);
     
-    let bytes = hex::decode(&key_hex)
-        .map_err(|e| format!("hex 解码失败: {}", e))?;
+    eprintln!("[KEYRING] 读取密钥: service={}, username={}", service, username);
     
-    if bytes.len() != 32 {
-        return Err("密钥长度错误".to_string());
+    let entry = keyring::Entry::new(service, &username)
+        .map_err(|e| format!("创建 keyring 条目失败: {:?}", e))?;
+    
+    match entry.get_password() {
+        Ok(key_hex) => {
+            eprintln!("[KEYRING] 读取成功: len={}", key_hex.len());
+            let bytes = hex::decode(&key_hex)
+                .map_err(|e| format!("hex 解码失败: {:?}", e))?;
+            
+            if bytes.len() != 32 {
+                return Err(format!("密钥长度错误: {}", bytes.len()));
+            }
+            
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&bytes);
+            Ok(key)
+        }
+        Err(e) => {
+            eprintln!("[KEYRING] 读取失败: {:?}", e);
+            Err(format!("获取密钥失败: {:?}", e))
+        }
     }
-    
-    let mut key = [0u8; 32];
-    key.copy_from_slice(&bytes);
-    Ok(key)
 }
 
 /// 从系统安全存储删除 baseKey
 pub fn delete_base_key(device_id: &str, package: &str) -> Result<(), String> {
-    let entry = create_keyring_entry(device_id, package)?;
+    let service = "ble-notification-sync";
+    let username = format!("{}:{}", device_id, package);
+    
+    let entry = keyring::Entry::new(service, &username)
+        .map_err(|e| format!("创建 keyring 条目失败: {:?}", e))?;
+    
     entry.delete_credential()
-        .map_err(|e| format!("删除密钥失败: {}", e))
+        .map_err(|e| format!("删除密钥失败: {:?}", e))
 }

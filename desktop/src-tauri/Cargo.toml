@@ -45,16 +45,6 @@ chrono = "0.4"
 # Secure credential storage (cross-platform: Windows Credential Manager / macOS Keychain / Linux Secret Service)
 keyring = "4"
 
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.57", features = [
-  "Devices_Bluetooth",
-  "Devices_Bluetooth_Advertisement",
-  "Devices_Bluetooth_GenericAttributeProfile",
-  "Devices_Radios",
-  "Storage_Streams",
-  "Foundation",
-]}
-
 [profile.release]
 codegen-units = 1
 lto = true

@@ -1,5 +1,23 @@
 # Progress Log
 
+## 2026-07-22 — 桌面端设备标识重构（移除 MAC 地址）
+
+- **改动内容**：
+  - 设备标识从 PC BLE MAC 改为 Android ANDROID_ID（`device_id`）
+  - 设备列表显示手机设备名（`device_name`），不再显示 MAC
+  - 扫码绑定对话框只显示 PC 设备名，不再显示 MAC
+  - REGISTER 消息支持可选的 `android_id` 和 `device_name` 字段（向后兼容）
+  - 密钥存储使用 `device_id` 作为标识
+- **涉及文件**：
+  - `ble.rs`：handle_register、handle_notify、sync_to_config、DeviceInfo
+  - `storage.rs`：PairedDevice 结构体、add/remove/get_paired_device
+  - `config.rs`：DeviceEntry 结构体、store/get/delete_base_key
+  - `main.js`：扫码对话框、设备列表显示
+- **待 Android 端同步**：
+  - REGISTER 消息添加 `android_id` + `device_name` 字段
+  - NOTIFY 消息在加密内容中带上 `android_id`
+  - QR 码格式移除 `mac` 字段
+
 ## 2026-07-22 — 桌面端代码审查与安全修复
 
 - **审查范围**：Tauri v2 桌面端（Rust 后端 + Vanilla JS 前端）

@@ -24,18 +24,12 @@ pub fn send(app_handle: &AppHandle, title: &str, body: &str) {
 }
 
 /// notify_rust 直接调用
-fn send_notify_rust(app_handle: &AppHandle, title: &str, body: &str) -> Result<(), String> {
+fn send_notify_rust(_app_handle: &AppHandle, title: &str, body: &str) -> Result<(), String> {
     let mut notification = notify_rust::Notification::new();
     notification.summary(title);
     notification.body(body);
 
-    // 检测是否安装版：检查标识文件
-    let app_id = app_handle.config().identifier.clone();
-    if is_installed() {
-        notification.app_id(&app_id);
-    }
-    // 开发版不设置 app_id，使用 notify_rust 默认的 POWERSHELL_APP_ID
-
+    // notify-rust v4 不支持 app_id 方法，使用默认设置
     notification.show().map_err(|e| format!("{:?}", e))?;
     Ok(())
 }

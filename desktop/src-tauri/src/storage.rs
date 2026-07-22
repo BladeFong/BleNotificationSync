@@ -7,7 +7,8 @@ use crate::config;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PairedDevice {
-    pub mac: String,
+    pub device_id: String,
+    pub device_name: String,
     pub app_name: String,
     pub package_name: String,
     pub paired_at: String,
@@ -16,7 +17,8 @@ pub struct PairedDevice {
 impl From<config::DeviceEntry> for PairedDevice {
     fn from(e: config::DeviceEntry) -> Self {
         Self {
-            mac: e.mac,
+            device_id: e.device_id,
+            device_name: e.device_name,
             app_name: e.app_name,
             package_name: e.package_name,
             paired_at: e.paired_at,
@@ -35,7 +37,7 @@ impl Default for StorageState {
         let devices = cfg
             .devices
             .into_iter()
-            .map(|d| (d.mac.clone(), PairedDevice::from(d)))
+            .map(|d| (d.device_id.clone(), PairedDevice::from(d)))
             .collect();
         Self {
             devices: Mutex::new(devices),
@@ -53,7 +55,8 @@ fn sync_devices_to_config(state: &StorageState) {
         devices: devices
             .values()
             .map(|d| config::DeviceEntry {
-                mac: d.mac.clone(),
+                device_id: d.device_id.clone(),
+                device_name: d.device_name.clone(),
                 app_name: d.app_name.clone(),
                 package_name: d.package_name.clone(),
                 paired_at: d.paired_at.clone(),
@@ -72,7 +75,8 @@ pub fn get_paired_devices(state: State<StorageState>) -> Result<Vec<PairedDevice
 #[tauri::command]
 pub fn add_paired_device(
     state: State<StorageState>,
-    mac: String,
+    device_id: String,
+    device_name: String,
     app_name: String,
     package_name: String,
     key_hex: String,
@@ -85,52 +89,53 @@ pub fn add_paired_device(
     key.copy_from_slice(&key_bytes);
 
     // Store baseKey in Windows Credential Manager
-    config::store_base_key(&mac, &package_name, &key)?;
+    config::store_base_key(&device_id, &package_name, &key)?;
 
     let device = PairedDevice {
-        mac: mac.clone(),
+        device_id: device_id.clone(),
+        device_name: device_name.clone(),
         app_name: app_name.clone(),
         package_name: package_name.clone(),
         paired_at: chrono::Utc::now().to_rfc3339(),
     };
 
-    devices.insert(mac.clone(), device);
+    devices.insert(device_id.clone(), device);
     drop(devices);
 
     // Persist to JSON config
     sync_devices_to_config(&state);
 
-    Ok(format!("Device {} paired successfully", mac))
+    Ok(format!("Device {} paired successfully", device_name))
 }
 
 #[tauri::command]
 pub fn remove_paired_device(
     state: State<StorageState>,
-    mac: String,
+    device_id: String,
 ) -> Result<String, String> {
     let mut devices = state.devices.lock().map_err(|e| e.to_string())?;
 
     // Delete baseKey from Credential Manager
-    if let Some(device) = devices.get(&mac) {
-        let _ = config::delete_base_key(&mac, &device.package_name);
+    if let Some(device) = devices.get(&device_id) {
+        let _ = config::delete_base_key(&device_id, &device.package_name);
     }
 
-    devices.remove(&mac);
+    devices.remove(&device_id);
     drop(devices);
 
     // Persist to JSON config
     sync_devices_to_config(&state);
 
-    Ok(format!("Device {} removed", mac))
+    Ok(format!("Device {} removed", device_id))
 }
 
 /// 获取存储的 baseKey（hex 字符串）
 #[tauri::command]
-pub fn get_device_key(state: State<StorageState>, mac: String) -> Result<String, String> {
+pub fn get_device_key(state: State<StorageState>, device_id: String) -> Result<String, String> {
     let devices = state.devices.lock().map_err(|e| e.to_string())?;
-    let device = devices.get(&mac).ok_or("Device not found")?;
+    let device = devices.get(&device_id).ok_or("Device not found")?;
 
-    config::get_base_key(&mac, &device.package_name)
+    config::get_base_key(&device_id, &device.package_name)
         .map(|key| hex::encode(key))
 }
 

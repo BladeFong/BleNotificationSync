@@ -1,13 +1,16 @@
 use std::collections::HashMap;
 use std::sync::Mutex as StdMutex;
 use tauri::{AppHandle, Emitter, Manager};
+#[cfg(not(target_os = "windows"))]
 use ble_peripheral_rust::{Peripheral, PeripheralImpl};
+#[cfg(not(target_os = "windows"))]
 use ble_peripheral_rust::gatt::{
     service::Service,
     characteristic::Characteristic,
     properties::{CharacteristicProperty, AttributePermission},
     peripheral_event::{PeripheralEvent, RequestResponse, WriteRequestResponse, ReadRequestResponse},
 };
+#[cfg(not(target_os = "windows"))]
 use uuid::Uuid;
 
 use crate::{config, crypto, protocol, storage};
@@ -16,9 +19,16 @@ const SERVICE_UUID: &str = "9e1d51a4-9c86-4447-9759-f6222b0f4b36";
 const CHAR_WRITE_UUID: &str = "f4788cde-8025-4c07-b352-87db1b272fdf";
 const CHAR_NOTIFY_UUID: &str = "e7f22370-d86b-4e1a-8289-8d77bfb534ee";
 
+#[cfg(target_os = "windows")]
+pub struct WindowsBleResources {
+    pub provider: windows::Devices::Bluetooth::GenericAttributeProfile::GattServiceProvider,
+}
+
 pub struct BleState {
     pub is_running: StdMutex<bool>,
     pub shutdown_tx: StdMutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    #[cfg(target_os = "windows")]
+    pub resources: StdMutex<Option<WindowsBleResources>>,
 }
 
 impl Default for BleState {
@@ -26,6 +36,8 @@ impl Default for BleState {
         Self {
             is_running: StdMutex::new(false),
             shutdown_tx: StdMutex::new(None),
+            #[cfg(target_os = "windows")]
+            resources: StdMutex::new(None),
         }
     }
 }
@@ -91,7 +103,15 @@ pub async fn handle_full_message(app_handle: &AppHandle, msg_type: u8, payload: 
 
 async fn handle_register(app_handle: &AppHandle, payload: &[u8]) {
     #[derive(serde::Deserialize)]
-    struct RegisterData { app_name: String, package: String, random: String }
+    struct RegisterData {
+        app_name: String,
+        package: String,
+        random: String,
+        #[serde(default)]
+        android_id: Option<String>,
+        #[serde(default)]
+        device_name: Option<String>,
+    }
     let data: RegisterData = match serde_json::from_slice(payload) {
         Ok(d) => d,
         Err(e) => { let _ = app_handle.emit("log-message", format!("REGISTER 解析失败: {}", e)); return; }
@@ -101,57 +121,90 @@ async fn handle_register(app_handle: &AppHandle, payload: &[u8]) {
         _ => { let _ = app_handle.emit("log-message", "REGISTER: random 格式错误"); return; }
     };
     let base_key = crypto::derive_key(&data.package, &random_bytes);
-    let mac = get_ble_mac();
+
+    // 使用 android_id 作为设备唯一标识（向后兼容：旧版无 android_id 时用 PC MAC）
+    let device_id = data.android_id.clone().unwrap_or_else(|| get_ble_mac());
+    let device_name = data.device_name.clone().unwrap_or_else(|| "Unknown".to_string());
 
     let storage_state = app_handle.state::<storage::StorageState>();
     {
         let mut devices = storage_state.devices.lock().unwrap();
-        devices.insert(mac.clone(), storage::PairedDevice {
-            mac: mac.clone(), app_name: data.app_name.clone(),
-            package_name: data.package.clone(), paired_at: chrono::Utc::now().to_rfc3339(),
-        });
+        // 如果设备已存在，更新设备名（支持动态更新）
+        if let Some(existing) = devices.get_mut(&device_id) {
+            existing.device_name = device_name.clone();
+            existing.app_name = data.app_name.clone();
+            existing.paired_at = chrono::Utc::now().to_rfc3339();
+        } else {
+            devices.insert(device_id.clone(), storage::PairedDevice {
+                device_id: device_id.clone(),
+                device_name: device_name.clone(),
+                app_name: data.app_name.clone(),
+                package_name: data.package.clone(),
+                paired_at: chrono::Utc::now().to_rfc3339(),
+            });
+        }
     }
     sync_to_config(&storage_state);
-    let _ = config::store_base_key(&mac, &data.package, &base_key);
+    let _ = config::store_base_key(&device_id, &data.package, &base_key);
 
     let _ = app_handle.emit("log-message",
-        format!("设备已绑定: {} [{}] ({})", data.app_name, data.package, mac));
+        format!("设备已绑定: {} [{}] ({})", data.app_name, data.package, device_name));
     let _ = app_handle.emit("device-registered", serde_json::json!({
-        "mac": mac, "app_name": data.app_name, "package": data.package,
+        "device_id": device_id, "device_name": device_name,
+        "app_name": data.app_name, "package": data.package,
     }).to_string());
 }
 
 async fn handle_notify(app_handle: &AppHandle, payload: &[u8]) {
-    if payload.len() < 14 { return; }
+    let _ = app_handle.emit("log-message", format!("开始处理通知，Payload 长度: {}", payload.len()));
+    if payload.len() < 14 {
+        let _ = app_handle.emit("log-message", format!("通知 Payload 过短: {}", payload.len()));
+        return;
+    }
     let pkg_len = payload[0] as usize;
-    if payload.len() < 1 + pkg_len + 12 + 1 { return; }
-    let package = String::from_utf8_lossy(&payload[1..1 + pkg_len]);
+    if payload.len() < 1 + pkg_len + 12 + 1 {
+        let _ = app_handle.emit("log-message", format!("通知 Payload 长度不足: payload_len={}, pkg_len={}", payload.len(), pkg_len));
+        return;
+    }
+    let package = String::from_utf8_lossy(&payload[1..1 + pkg_len]).to_string();
     let nonce = &payload[1 + pkg_len..1 + pkg_len + 12];
     let ciphertext = &payload[1 + pkg_len + 12..];
 
+    let _ = app_handle.emit("log-message", format!("解析包名: {}, Nonce 长度: {}, 密文长度: {}", package, nonce.len(), ciphertext.len()));
+
     let storage_state = app_handle.state::<storage::StorageState>();
-    let mac = {
+    let device_id = {
         let devices = storage_state.devices.lock().unwrap();
-        devices.iter().find(|(_, d)| d.package_name == package).map(|(m, _)| m.clone())
+        devices.iter().find(|(_, d)| d.package_name == package).map(|(id, _)| id.clone())
     };
-    let mac = match mac {
-        Some(m) => m,
+    let device_id = match device_id {
+        Some(id) => id,
         None => { let _ = app_handle.emit("log-message", format!("未找到设备: {}", package)); return; }
     };
-    let base_key = match config::get_base_key(&mac, &package) {
+    let base_key = match config::get_base_key(&device_id, &package) {
         Ok(k) => k,
-        Err(_) => return,
+        Err(e) => { let _ = app_handle.emit("log-message", format!("获取密钥失败: {}", e)); return; }
     };
     let plaintext = match crypto::decrypt(&base_key, nonce, ciphertext) {
         Ok(p) => p,
         Err(e) => { let _ = app_handle.emit("log-message", format!("解密失败: {}", e)); return; }
     };
-    if let Ok(json_str) = String::from_utf8(plaintext) {
-        #[derive(serde::Deserialize)]
-        struct NotifyData { title: String, content: String }
-        if let Ok(data) = serde_json::from_str::<NotifyData>(&json_str) {
-            let _ = app_handle.emit("log-message", format!("通知: {} - {}", data.title, data.content));
-            crate::notify::send(app_handle, &data.title, &data.content);
+    match String::from_utf8(plaintext) {
+        Ok(json_str) => {
+            #[derive(serde::Deserialize)]
+            struct NotifyData { title: String, body: String }
+            match serde_json::from_str::<NotifyData>(&json_str) {
+                Ok(data) => {
+                    let _ = app_handle.emit("log-message", format!("通知: {} - {}", data.title, data.body));
+                    crate::notify::send(app_handle, &data.title, &data.body);
+                }
+                Err(e) => {
+                    let _ = app_handle.emit("log-message", format!("解析通知 JSON 失败: {}, Raw: {}", e, json_str));
+                }
+            }
+        }
+        Err(e) => {
+            let _ = app_handle.emit("log-message", format!("明文转换为 UTF-8 失败: {:?}", e));
         }
     }
 }
@@ -162,8 +215,11 @@ fn sync_to_config(state: &storage::StorageState) {
     let _ = config::save_config(&config::AppConfig {
         silent_mode: *silent,
         devices: devices.values().map(|d| config::DeviceEntry {
-            mac: d.mac.clone(), app_name: d.app_name.clone(),
-            package_name: d.package_name.clone(), paired_at: d.paired_at.clone(),
+            device_id: d.device_id.clone(),
+            device_name: d.device_name.clone(),
+            app_name: d.app_name.clone(),
+            package_name: d.package_name.clone(),
+            paired_at: d.paired_at.clone(),
         }).collect(),
     });
 }
@@ -248,6 +304,7 @@ pub fn start_service(app_handle: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "windows"))]
 async fn run_peripheral_task(
     app_handle: AppHandle,
     mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
@@ -307,6 +364,7 @@ async fn run_peripheral_task(
     Ok(())
 }
 
+#[cfg(not(target_os = "windows"))]
 async fn handle_ble_events(
     app_handle: AppHandle,
     mut event_rx: tokio::sync::mpsc::Receiver<PeripheralEvent>,
@@ -362,6 +420,172 @@ async fn handle_ble_events(
     }
 }
 
+#[cfg(target_os = "windows")]
+async fn run_peripheral_task(
+    app_handle: AppHandle,
+    mut shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+) -> Result<(), String> {
+    use windows::core::GUID;
+    use windows::Devices::Bluetooth::BluetoothAdapter;
+    use windows::Devices::Bluetooth::GenericAttributeProfile::{
+        GattLocalCharacteristicParameters, GattServiceProvider, GattServiceProviderAdvertisingParameters,
+        GattLocalCharacteristic, GattWriteRequestedEventArgs,
+    };
+
+    use windows::Foundation::TypedEventHandler;
+    use tokio::sync::mpsc;
+
+    macro_rules! werr {
+        ($e:expr, $msg:expr) => { $e.map_err(|e| format!("{}: {}", $msg, e)) };
+    }
+
+    // 1. 适配器检查
+    let op = werr!(BluetoothAdapter::GetDefaultAsync(), "GetDefaultAsync")?;
+    let adapter = werr!(op.await, "await adapter")?;
+    let addr = werr!(adapter.BluetoothAddress(), "BluetoothAddress")?;
+    let _ = app_handle.emit("log-message", format!("BLE: 适配器={:012X}", addr));
+    let supported = adapter.IsPeripheralRoleSupported().unwrap_or(false);
+    let _ = app_handle.emit("log-message", format!("BLE: Peripheral: {}", if supported { "✓" } else { "✗" }));
+    if !supported { return Err("不支持 Peripheral 模式".into()); }
+
+    let srv_uuid = werr!(GUID::try_from(SERVICE_UUID), "Invalid Service GUID")?;
+
+    // 2. 创建 GATT Service
+    let create_op = werr!(GattServiceProvider::CreateAsync(srv_uuid), "CreateAsync")?;
+    let pr = werr!(create_op.await, "await CreateAsync")?;
+    if pr.Error().unwrap_or(Default::default()) != windows::Devices::Bluetooth::BluetoothError::Success {
+        return Err(format!("GattServiceProvider 失败: {:?}", pr.Error()));
+    }
+    let provider = werr!(pr.ServiceProvider(), "ServiceProvider")?;
+    let _ = app_handle.emit("log-message", "BLE: GATT 服务创建成功");
+
+    // 3. 创建 Write Characteristic
+    let char_uuid = werr!(GUID::try_from(CHAR_WRITE_UUID), "Invalid Char GUID")?;
+    let cp = werr!(GattLocalCharacteristicParameters::new(), "CharParams")?;
+    werr!(cp.SetCharacteristicProperties(
+        windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristicProperties::WriteWithoutResponse
+    ), "SetProps")?;
+    werr!(cp.SetWriteProtectionLevel(
+        windows::Devices::Bluetooth::GenericAttributeProfile::GattProtectionLevel::Plain
+    ), "SetWriteProt")?;
+
+    let svc = werr!(provider.Service(), "Service")?;
+    let co = werr!(svc.CreateCharacteristicAsync(char_uuid, &cp), "CreateCharAsync")?;
+    let cr = werr!(co.await, "await CreateChar")?;
+    if cr.Error().unwrap_or(Default::default()) != windows::Devices::Bluetooth::BluetoothError::Success {
+        return Err(format!("创建特征值失败: {:?}", cr.Error()));
+    }
+    let characteristic = werr!(cr.Characteristic(), "Characteristic")?;
+    let _ = app_handle.emit("log-message", "BLE: GATT 特征值创建成功");
+
+    // 4. 事件处理通道
+    let (data_tx, mut data_rx) = mpsc::channel::<Vec<u8>>(256);
+    {
+        let handler = TypedEventHandler::<GattLocalCharacteristic, GattWriteRequestedEventArgs>::new(
+            move |_s, args: &Option<GattWriteRequestedEventArgs>| {
+                if let Some(args) = args {
+                    if let Ok(req_op) = args.GetRequestAsync() {
+                        let req = req_op.get().ok();
+                        if let Some(req) = req {
+                            if let Ok(val) = req.Value() {
+                                if let Ok(reader) = windows::Storage::Streams::DataReader::FromBuffer(&val) {
+                                    let len = reader.UnconsumedBufferLength().unwrap_or(0) as usize;
+                                    if len > 0 {
+                                        let mut buf = vec![0u8; len];
+                                        reader.ReadBytes(&mut buf).ok();
+                                        let _ = data_tx.blocking_send(buf);
+                                    }
+                                }
+                            }
+                            req.Respond().ok();
+                        }
+                    }
+                }
+                Ok(())
+            }
+        );
+        werr!(characteristic.WriteRequested(&handler), "WriteRequested")?;
+    }
+
+    let ap = werr!(GattServiceProviderAdvertisingParameters::new(), "AdvParams")?;
+    werr!(ap.SetIsDiscoverable(true), "Discoverable")?;
+    werr!(ap.SetIsConnectable(true), "Connectable")?;
+    werr!(provider.StartAdvertisingWithParameters(&ap), "StartAdv")?;
+
+    // 异步检查真实广播状态
+    let app_handle_check = app_handle.clone();
+    let provider_check = provider.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let prov_status = provider_check.AdvertisementStatus().map(|s| s.0).unwrap_or(-1);
+        
+        let prov_str = match prov_status {
+            0 => "Created (已创建)",
+            1 => "Stopped (已停止)",
+            2 => "Started (已启动/广播中)",
+            3 => "Aborted (异常终止/未就绪)",
+            4 => "StartedWithoutTypeName",
+            _ => "Unknown",
+        };
+        let _ = app_handle_check.emit("log-message", format!(
+            "BLE: 实际广播状态：GattServer={}",
+            prov_str
+        ));
+    });
+
+    // 7. 保存资源到全局 BleState 中防止被 drop
+    let state = app_handle.state::<BleState>();
+    {
+        let mut guard = state.resources.lock().unwrap();
+        *guard = Some(WindowsBleResources { provider });
+    }
+
+    // 8. 监听事件
+    let app_handle_clone = app_handle.clone();
+    let event_loop = async move {
+        let mut fragments = FragmentBuffer::new();
+        while let Some(bytes) = data_rx.recv().await {
+            let _ = app_handle_clone.emit("log-message", format!("BLE: 收到 {} 字节", bytes.len()));
+            if !bytes.is_empty() {
+                if let Some(frame) = protocol::parse_frame(&bytes) {
+                    let _ = app_handle_clone.emit(
+                        "log-message",
+                        format!(
+                            "BLE 收到帧: 类型 {:02X}, 包序号 {}/{}",
+                            frame.msg_type, frame.seq, frame.total_seq
+                        ),
+                    );
+                    if let Some(full) = fragments.insert(
+                        frame.msg_type,
+                        frame.total_seq,
+                        frame.seq,
+                        frame.payload,
+                    ) {
+                        handle_full_message(&app_handle_clone, frame.msg_type, &full).await;
+                    }
+                }
+            }
+        }
+    };
+
+    tokio::select! {
+        _ = event_loop => {}
+        _ = &mut shutdown_rx => {
+            let _ = app_handle.emit("log-message", "BLE: 正在关闭服务，停止广播");
+        }
+    }
+
+    // 清理资源
+    {
+        let mut guard = state.resources.lock().unwrap();
+        if let Some(res) = guard.take() {
+            let _ = res.provider.StopAdvertising();
+        }
+    }
+
+    Ok(())
+}
+
 pub fn stop_service(app_handle: &AppHandle) -> Result<(), String> {
     let state = app_handle.state::<BleState>();
     stop_internal(&state)?;
@@ -399,6 +623,17 @@ pub fn stop_gatt_server(app_handle: AppHandle) -> Result<String, String> {
 #[tauri::command]
 pub fn get_status(app_handle: AppHandle) -> Result<String, String> {
     Ok(if is_service_running(&app_handle) { "Running" } else { "Stopped" }.to_string())
+}
+
+#[derive(serde::Serialize)]
+pub struct DeviceInfo {
+    pub name: String,
+}
+
+#[tauri::command]
+pub fn get_device_info() -> Result<DeviceInfo, String> {
+    let name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "UnknownPC".to_string());
+    Ok(DeviceInfo { name })
 }
 
 #[tauri::command]

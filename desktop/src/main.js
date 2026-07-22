@@ -69,7 +69,7 @@ pairBtn.addEventListener('click', () => {
         <div style="background:white;border-radius:12px;padding:30px;max-width:400px;text-align:center;">
             <h3 style="margin-bottom:15px;">${isChinese ? '扫码绑定' : 'Pair Device'}</h3>
             <p style="margin-bottom:10px;">${isChinese ? '使用手机 APP 扫描下方二维码' : 'Scan QR code with phone app'}</p>
-            <p id="macDisplay" style="margin-bottom:20px;font-size:14px;color:#666;">MAC: ${isChinese ? '获取中...' : 'Loading...'}</p>
+            <p id="pcNameDisplay" style="margin-bottom:20px;font-size:14px;color:#666;">${isChinese ? '设备名: 获取中...' : 'Device: Loading...'}</p>
             <div id="qrContainer" style="width:200px;height:200px;margin:0 auto;border:1px solid #eee;display:flex;align-items:center;justify-content:center;">
                 <div class="loading-spinner"></div>
             </div>
@@ -81,14 +81,13 @@ pairBtn.addEventListener('click', () => {
 
     // Async fetch device info
     invoke('get_device_info').then(info => {
-        const macDisplay = document.getElementById('macDisplay');
+        const pcNameDisplay = document.getElementById('pcNameDisplay');
         const qrContainer = document.getElementById('qrContainer');
-        if (!macDisplay || !qrContainer) return;
+        if (!pcNameDisplay || !qrContainer) return;
 
-        const mac = info.mac;
         const name = info.name;
-        macDisplay.textContent = `MAC: ${mac} (${name})`;
-        const qrContent = `ble://pair?mac=${mac}&uuid=${uuid}&name=${encodeURIComponent(name)}`;
+        pcNameDisplay.textContent = `${isChinese ? '设备名' : 'Device'}: ${name}`;
+        const qrContent = `ble://pair?uuid=${uuid}&name=${encodeURIComponent(name)}`;
 
         // Replace loading spinner with real QR code
         qrContainer.innerHTML = '';
@@ -143,9 +142,8 @@ async function refreshDeviceList() {
         }
         deviceList.innerHTML = devices.map(d =>
             `<div class="device-item">
-                <span class="device-name">${d.app_name}</span>
+                <span class="device-name">${d.device_name}</span>
                 <span class="device-pkg">${d.package_name}</span>
-                <span class="device-mac">${d.mac}</span>
             </div>`
         ).join('');
     } catch (e) {

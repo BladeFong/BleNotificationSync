@@ -33,7 +33,8 @@ pub struct AppConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceEntry {
-    pub mac: String,
+    pub device_id: String,
+    pub device_name: String,
     pub app_name: String,
     pub package_name: String,
     pub paired_at: String,
@@ -69,17 +70,17 @@ pub fn save_config(config: &AppConfig) -> Result<(), String> {
 }
 
 /// 通过 Windows Credential Manager 存储 baseKey
-/// Service: ble-notification-sync, Username: {mac}:{package}, Password: key_hex
+/// Service: ble-notification-sync, Username: {device_id}:{package}, Password: key_hex
 #[cfg(target_os = "windows")]
-pub fn store_base_key(mac: &str, package: &str, key: &[u8; 32]) -> Result<(), String> {
+pub fn store_base_key(device_id: &str, package: &str, key: &[u8; 32]) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
-    let target = format!("BleNotificationSync/{}/{}", mac, package);
+    let target = format!("BleNotificationSync/{}/{}", device_id, package);
     let key_hex = hex::encode(key);
 
     let output = std::process::Command::new("cmdkey")
         .args(&[
             &format!("/generic:{}", target),
-            &format!("/user:{}:{}", mac, package),
+            &format!("/user:{}:{}", device_id, package),
             &format!("/pass:{}", key_hex),
         ])
         .creation_flags(0x08000000)
@@ -94,15 +95,15 @@ pub fn store_base_key(mac: &str, package: &str, key: &[u8; 32]) -> Result<(), St
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn store_base_key(_mac: &str, _package: &str, _key: &[u8; 32]) -> Result<(), String> {
+pub fn store_base_key(_device_id: &str, _package: &str, _key: &[u8; 32]) -> Result<(), String> {
     Err("Credential Manager only supported on Windows".to_string())
 }
 
 /// 从 Windows Credential Manager 读取 baseKey
 #[cfg(target_os = "windows")]
-pub fn get_base_key(mac: &str, package: &str) -> Result<[u8; 32], String> {
+pub fn get_base_key(device_id: &str, package: &str) -> Result<[u8; 32], String> {
     use std::os::windows::process::CommandExt;
-    let target = format!("BleNotificationSync/{}/{}", mac, package);
+    let target = format!("BleNotificationSync/{}/{}", device_id, package);
 
     // Natively load CredReadW using C# in PowerShell via Add-Type (independent of extra modules)
     // 使用 $args[0] 参数化传递 target，避免命令注入
@@ -160,15 +161,15 @@ public class Cred {
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn get_base_key(_mac: &str, _package: &str) -> Result<[u8; 32], String> {
+pub fn get_base_key(_device_id: &str, _package: &str) -> Result<[u8; 32], String> {
     Err("Credential Manager only supported on Windows".to_string())
 }
 
 /// 从 Windows Credential Manager 删除 baseKey
 #[cfg(target_os = "windows")]
-pub fn delete_base_key(mac: &str, package: &str) -> Result<(), String> {
+pub fn delete_base_key(device_id: &str, package: &str) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
-    let target = format!("BleNotificationSync/{}/{}", mac, package);
+    let target = format!("BleNotificationSync/{}/{}", device_id, package);
 
     std::process::Command::new("cmdkey")
         .args(&[&format!("/delete:{}", target)])
@@ -180,6 +181,6 @@ pub fn delete_base_key(mac: &str, package: &str) -> Result<(), String> {
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn delete_base_key(_mac: &str, _package: &str) -> Result<(), String> {
+pub fn delete_base_key(_device_id: &str, _package: &str) -> Result<(), String> {
     Err("Credential Manager only supported on Windows".to_string())
 }

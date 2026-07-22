@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="s_app_name">BLE 通知同步测试</string>
+    <string name="s_scan_pair">扫描绑定</string>
+    <string name="s_unpair">解除绑定</string>
+    <string name="s_send_reminder">发送提醒 (10秒后)</string>
+    <string name="s_default_text">测试通知消息</string>
+    <string name="s_app_display_name">BLE通知测试</string>
+    <string name="s_unpaired">已解除绑定</string>
+    <string name="s_notify_title">BLE 通知测试</string>
+    <string name="s_clear_log">清空日志</string>
+    <string name="s_device_manager_loading">PC 设备管理 (加载中…)</string>
+    <string name="s_device_manager_paired">PC 设备管理 (已关联 %1$d 台 PC)</string>
+    <string name="s_device_manager_none">PC 设备管理 (暂未绑定设备)</string>
+    <string name="s_scan_ble_devices">扫描 BLE 设备 (10秒)</string>
+    <string name="s_log_waiting">日志：等待操作…</string>
+    <string name="s_reminder_scheduled">提醒已设置，10 秒后触发</string>
+    <string name="s_need_alarm_permission">需要闹钟权限，跳转设置…</string>
+    <string name="s_need_notification_permission">需要通知权限以进行后台提醒同步</string>
+    <string name="s_cannot_open_alarm_settings">无法自动打开设置，请手动开启精准闹钟权限</string>
+
+</resources>

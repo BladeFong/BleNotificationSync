@@ -130,8 +130,8 @@ class BleScanWorker(
                         if (cont.isActive) cont.resume(false)
                         return
                     }
-                    characteristic.value = frame
-                    gatt.writeCharacteristic(characteristic)
+                    com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, frame)
+
                     Handler(Looper.getMainLooper()).postDelayed({
                         gatt.close()
                         if (cont.isActive) cont.resume(true)

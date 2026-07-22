@@ -1,12 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="s_app_name">BLE 通知同步测试</string>
-    <string name="s_scan_pair">扫描绑定</string>
-    <string name="s_unpair">解除绑定</string>
-    <string name="s_send_reminder">发送提醒 (10秒后)</string>
-    <string name="s_default_text">测试通知消息</string>
-    <string name="s_app_display_name">BLE通知测试</string>
-    <string name="s_unpaired">已解除绑定</string>
-    <string name="s_notify_title">BLE 通知测试</string>
-    <string name="s_clear_log">清空日志</string>
+    <string name="s_app_name">BLE Sync Demo</string>
+    <string name="s_scan_pair">Scan &amp; Pair</string>
+    <string name="s_unpair">Unpair</string>
+    <string name="s_send_reminder">Send Reminder (In 10s)</string>
+    <string name="s_default_text">Test Notification Message</string>
+    <string name="s_app_display_name">BLE Sync Demo</string>
+    <string name="s_unpaired">Unpaired</string>
+    <string name="s_notify_title">BLE Sync Test</string>
+    <string name="s_clear_log">Clear Log</string>
+    <string name="s_device_manager_loading">PC Device Manager (Loading…)</string>
+    <string name="s_device_manager_paired">PC Device Manager (%1$d Paired)</string>
+    <string name="s_device_manager_none">PC Device Manager (No Devices Paired)</string>
+    <string name="s_scan_ble_devices">Scan BLE Devices (10s)</string>
+    <string name="s_log_waiting">Logs: Waiting for action…</string>
+    <string name="s_reminder_scheduled">Reminder scheduled, triggers in 10s</string>
+    <string name="s_need_alarm_permission">Exact alarm permission required, opening settings…</string>
+    <string name="s_need_notification_permission">Notification permission required for background sync</string>
+    <string name="s_cannot_open_alarm_settings">Cannot open settings automatically, please enable exact alarm permission manually.</string>
+
 </resources>
+

@@ -36,20 +36,23 @@ class BleForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) { stopSelf(); return START_NOT_STICKY }
 
-        // 同步调用 startForeground，声明 CONNECTED_DEVICE + LOCATION 类型
-        val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-        } else 0
-
-        startForeground(NOTIFICATION_ID, NotificationCompat.Builder(this, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("BLE 通知同步")
             .setContentText("正在扫描设备…")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build(),
-            serviceType)
+            .build()
+
+        val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        } else 0
+
+        androidx.core.app.ServiceCompat.startForeground(
+            this, NOTIFICATION_ID, notification, serviceType
+        )
+
 
         val title = intent.getStringExtra(EXTRA_TITLE) ?: ""
         val body = intent.getStringExtra(EXTRA_BODY) ?: ""
@@ -80,9 +83,9 @@ class BleForegroundService : Service() {
                     stopSelf()
                     return
                 }
-                characteristic.value = frame
-                val sent = gatt.writeCharacteristic(characteristic)
+                val sent = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, frame)
                 android.util.Log.d("BleClient", "BleForegroundService: writeCharacteristic sent=$sent")
+
                 sdk.notifySynced(taskId, true)
                 Handler(Looper.getMainLooper()).postDelayed({ gatt.close(); stopSelf() }, 3000)
 

@@ -1,6 +1,26 @@
 # 多 PC 绑定 — 模块进度日志
 
+## 2026-07-22 — 审查细节补全：GATT 写入 API 33 兼容封装与权限请求现代化
+- GATT 写入 API 兼容：新增 `BleCompat.writeCharacteristic`，在 Android 13 (API 33)+ 上全面适配 `gatt.writeCharacteristic(characteristic, value, writeType)` 官方推荐 API，低版本平滑降级，移除了所有 Deprecation 警告。
+- 权限请求现代化：Demo 模块将 `POST_NOTIFICATIONS` 权限请求全量迁移至 Activity Result API (`registerForActivityResult(ActivityResultContracts.RequestPermission())`)。
+- Compose 暗色模式深度适配：`DeviceManagerFragment` 空状态控件色值全面对接 `MaterialTheme.colors`，提升各种动态主题下的对比度与视觉体验。
+
+## 2026-07-22 — Demo 资源国际化补全与暗色模式优化
+
+- 全面提取 Demo 硬编码文本：将 `MainActivity` 及 `activity_main.xml` 中所有的提示词、按钮文案和日志状态提取至 `demo/src/main/res/values/strings.xml` (默认英文) 和 `demo/src/main/res/values-zh/strings.xml` (简体中文)。
+- 暗色模式优化：将日志展示控件背景色修改为系统主题属性 `?android:attr/colorBackground`，全面适配系统暗色模式。
+
+## 2026-07-22 — 代码审查与密钥 Base64 存储重构：优化安全性、跨平台对齐与防崩保护
+
+- 彻底解决密钥溢出问题：重构 `PairingManager` 中密钥的持久化存储与读取，统一使用标准的 **Base64** 编解码（`b64:...`），并保持对旧版字符解析的平滑兼容。
+- 依据审查结果实施深度修复：
+  - `FrameEncoder` 内部构造 JSON 时增加字符串安全转义，防止 `title`/`body` 包含双引号 `"` 破坏 JSON 荷载。
+  - `BleClient` 在发起连接前增加单例标志位的显式重置，并升级 API 31+ `BluetoothManager.getAdapter()` 获取方式。
+  - `BleForegroundService` 前台服务升级采用 `ServiceCompat.startForeground` 保证全 Android 版本系统兼容。
+  - `MainActivity` 增加 `Handler` 延时任务在 `onDestroy` 时的释放清理、精准闹钟跳转系统的 `try-catch (ActivityNotFoundException)` 崩溃防护以及异步 UI 回调 `isFinishing`/`isDestroyed` 状态校验。
+
 ## 2026-07-22 — 后台前台服务密钥查找修复：彻底解决 BleForegroundService 丢失密钥中断发送问题
+
 - 排查日志并修复硬伤：此前的日志停在 `MTU: status=0 mtu=517` 且未发出数据，根因是 `BleForegroundService` 内部误将 `packageName` 作为 Key 查询参数传给 `getBaseKey` 返回 `null` 导致服务静默中断 (`stopSelf()`)。
 - 修复与日志完善：修正为根据已绑定设备的 `uuid` 正确获取密钥加密，并补充 `BleForegroundService: writeCharacteristic sent=...` 明确写入状态日志。
 

@@ -8,7 +8,11 @@
 # 研究发现、技术决策、需求分析 （拆分自 findings.md）
 
 ## 技术决策与踩坑记录
+- **BluetoothGatt 写入 API 33+ 兼容封装**：新增 `BleCompat.writeCharacteristic` 统一适配 API 33+ `gatt.writeCharacteristic(characteristic, value, writeType)` 官方新 API，旧版本平滑降级，彻底消除写特征值方法的废弃警告。
+- **密钥 Base64 存储与审查优化**：重构 `PairingManager` 密钥持久化逻辑，改用标准的 Base64 编解码（`b64:...`）防字节转换溢出；根据审查建议完善了 JSON 安全转义、全 Android 版本 `ServiceCompat` 前台服务兼容与 `Handler` 泄露防护。
+
 - **放弃随机 MAC 做主键**：BLE GATT 获得的 MAC 地址由于 privacy 机制存在随机化（RPA），频繁改变，不可作为设备持久化主键。改成 PC 二维码中的固定 `uuid` 作为 Key (`pairing_$uuid`)。
+
 - **Fragment 导航解耦与控栈规范**：被调用的 Fragment (`QrScannerFragment`) 自身绝对不固化任何 Tag 或自销毁弹栈操作；由调用管理者 (`DeviceManagerFragment`) 负责 `replace` 并添加匿名栈 (`addToBackStack(null)`)，且在结果回调时由管理者决定出栈，保持 SDK 与宿主导航架构的绝对透明解耦。
 - **二维码协议兼容**：PC 端在最新版本中去除了随机改变的 MAC 地址，仅保留 `uuid` 和 `name`（格式 `ble://pair?uuid=${uuid}&name=${name}`）。SDK 端的 `QrDecoder` 调整为只强校验 `uuid` 参数，`mac` 改为可选解析。
 

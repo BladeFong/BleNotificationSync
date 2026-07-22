@@ -39,6 +39,12 @@ object BleClient {
     private var readyCalled = false
     private var activeScanCallback: android.bluetooth.le.ScanCallback? = null
 
+    private fun getAdapter(context: Context): android.bluetooth.BluetoothAdapter? {
+
+        val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+        return manager?.adapter ?: @Suppress("DEPRECATION") android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+    }
+
     fun connect(context: Context, mac: String, callback: ConnectionCallback) {
         connectDirectly(context, mac, callback)
     }
@@ -46,9 +52,10 @@ object BleClient {
     /** 绑定专用：扫描 UUID 找到实际 MAC 后连接 */
     fun connectWithScan(context: Context, callback: ConnectionCallback) {
         android.util.Log.d("BleClient", "connectWithScan called")
-        val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+        val bluetoothAdapter = getAdapter(context)
         if (bluetoothAdapter == null) { callback.onError(SdkError.BluetoothUnavailable()); return }
         if (!bluetoothAdapter.isEnabled) { callback.onError(SdkError.BluetoothDisabled()); return }
+
 
         val missing = getMissingPermissions(context)
         if (missing.isNotEmpty()) { callback.onError(SdkError.PermissionDenied(missing.toList())); return }
@@ -141,9 +148,10 @@ object BleClient {
             }
         }, 3_000)
 
-        val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+        val bluetoothAdapter = getAdapter(context)
         if (bluetoothAdapter == null) { callback.onError(SdkError.BluetoothUnavailable()); return }
         if (!bluetoothAdapter.isEnabled) { callback.onError(SdkError.BluetoothDisabled()); return }
+
 
         val missing = getMissingPermissions(context)
         if (missing.isNotEmpty()) { callback.onError(SdkError.PermissionDenied(missing.toList())); return }

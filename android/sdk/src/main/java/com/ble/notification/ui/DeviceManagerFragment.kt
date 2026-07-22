@@ -319,16 +319,17 @@ fun EmptyStateView() {
         Text(
             text = stringResource(R.string.s_no_paired_devices),
             fontSize = 16.sp,
-            color = Color(0xFF424242),
+            color = MaterialTheme.colors.onBackground,
             fontWeight = FontWeight.Medium
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = stringResource(R.string.s_empty_device_hint),
             fontSize = 13.sp,
-            color = Color.Gray
+            color = MaterialTheme.colors.onBackground.copy(alpha = 0.6f)
         )
     }
+
 }
 
 @Composable

@@ -142,7 +142,16 @@ object FrameEncoder {
         return frame
     }
 
-    private fun jsonString(value: String): String = "\"$value\""
+    private fun jsonString(value: String): String {
+        val escaped = value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        return "\"$escaped\""
+    }
+
 
     private fun buildJson(vararg fields: Pair<String, String>): String {
         return fields.joinToString(",", "{", "}") { (key, value) ->

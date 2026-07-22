@@ -226,11 +226,15 @@ class BleNotificationSDK private constructor(private val context: Context) {
                     return
                 }
 
-                characteristic.value = frame
-                gatt.writeCharacteristic(characteristic)
-                callback?.onSuccess()
+                val writeOk = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, frame)
+                if (writeOk) {
+                    callback?.onSuccess()
+                } else {
+                    callback?.onError(SdkError.Unknown("Gatt write failed"))
+                }
 
                 mainHandler.postDelayed({
+
                     gatt.disconnect()
                     gatt.close()
                 }, 3000)

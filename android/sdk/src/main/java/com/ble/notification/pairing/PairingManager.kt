@@ -130,9 +130,9 @@ class PairingManager(private val context: Context) {
                         callback.onError(SdkError.ServiceNotFound())
                         return
                     }
-                    characteristic.value = registerFrame
-                    val writeOk = gatt.writeCharacteristic(characteristic)
+                    val writeOk = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, registerFrame)
                     android.util.Log.d("BleClient", "writeCharacteristic returned: $writeOk")
+
                     val baseKey = deriveBaseKey(packageName, random)
                     val actualMac = gatt.device.address
                     val deviceName = qrResult.name ?: gatt.device.name ?: "PC Device"
@@ -169,7 +169,9 @@ class PairingManager(private val context: Context) {
         baseKey: ByteArray? = null,
         pairedAt: Long = System.currentTimeMillis()
     ) {
-        val keyStr = baseKey?.joinToString(",") ?: ""
+        val keyStr = if (baseKey != null && baseKey.isNotEmpty()) {
+            "b64:" + android.util.Base64.encodeToString(baseKey, android.util.Base64.NO_WRAP)
+        } else ""
         savePairingInternal(uuid, deviceName, appName, keyStr, pairedAt)
         refreshPairedDevices()
     }
@@ -202,8 +204,23 @@ class PairingManager(private val context: Context) {
         val parts = value.split("|", limit = 5)
         val keyStr = parts.getOrNull(3) ?: return null
         if (keyStr.isEmpty()) return null
-        return keyStr.split(",").map { it.toByte() }.toByteArray()
+        if (keyStr.startsWith("b64:")) {
+            return try {
+                android.util.Base64.decode(keyStr.substring(4), android.util.Base64.NO_WRAP)
+            } catch (e: Exception) {
+                null
+            }
+        }
+        return try {
+            keyStr.split(",").map {
+                val v = it.toIntOrNull() ?: 0
+                v.toByte()
+            }.toByteArray()
+        } catch (e: Exception) {
+            null
+        }
     }
+
 
     fun getPairedDevices(): List<PairedDevice> {
         return prefs.all.mapNotNull { (key, value) ->

@@ -26,7 +26,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnScanOnly: Button
     private lateinit var tvLog: TextView
 
+    private val requestNotificationPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            log(getString(R.string.s_need_notification_permission))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -59,11 +68,16 @@ class MainActivity : AppCompatActivity() {
         btnScanOnly.setOnClickListener { doScanOnly() }
         findViewById<Button>(R.id.btn_clear_log).setOnClickListener {
             LogRepository.clear(this)
-            tvLog.text = "日志：等待操作…"
+            tvLog.text = getString(R.string.s_log_waiting)
         }
 
+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 0x7200_0002)
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    this, android.Manifest.permission.POST_NOTIFICATIONS
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestNotificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
     }
 
@@ -132,8 +146,12 @@ class MainActivity : AppCompatActivity() {
         val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
             !alarmManager.canScheduleExactAlarms()) {
-            log("需要闹钟权限，跳转设置…")
-            startActivity(android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
+            log(getString(R.string.s_need_alarm_permission))
+            try {
+                startActivity(android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
+            } catch (e: android.content.ActivityNotFoundException) {
+                Toast.makeText(this, getString(R.string.s_cannot_open_alarm_settings), Toast.LENGTH_SHORT).show()
+            }
             return
         }
 
@@ -150,8 +168,9 @@ class MainActivity : AppCompatActivity() {
             triggerAt = triggerAt,
             callback = object : ReminderCallback {
                 override fun onScheduled(taskId: String) {
+                    if (isFinishing || isDestroyed) return
                     log("闹钟已设置，10秒后触发，退出App")
-                    Toast.makeText(this@MainActivity, "提醒已设置，10 秒后触发", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.s_reminder_scheduled), Toast.LENGTH_SHORT).show()
                     finish()
                 }
                 override fun onTriggered(taskId: String) {}
@@ -160,8 +179,12 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+
+    private var scanHandler: android.os.Handler? = null
+
     private fun doScanOnly() {
-        val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+        val bluetoothManager = getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+        val bluetoothAdapter = bluetoothManager?.adapter ?: @Suppress("DEPRECATION") android.bluetooth.BluetoothAdapter.getDefaultAdapter()
         if (bluetoothAdapter == null) {
             android.util.Log.e("BleClient", "Activity: 蓝牙不可用")
             return
@@ -187,7 +210,6 @@ class MainActivity : AppCompatActivity() {
             override fun onScanResult(callbackType: Int, result: android.bluetooth.le.ScanResult) {
                 count++
                 android.util.Log.d("BleClient", "Activity Scan hit #${count}: name=${result.device.name} rssi=${result.rssi}")
-
             }
             override fun onBatchScanResults(results: MutableList<android.bluetooth.le.ScanResult>?) {
                 android.util.Log.d("BleClient", "Activity onBatchScanResults: ${results?.size ?: 0} results")
@@ -201,25 +223,38 @@ class MainActivity : AppCompatActivity() {
         btnScanOnly.isEnabled = false
         scanner.startScan(null, settings, callback)
 
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            scanner.stopScan(callback)
-            btnScanOnly.isEnabled = true
-            android.util.Log.d("BleClient", "Activity: 扫描结束，共扫到 $count 个设备")
-        }, 10_000)
+        scanHandler?.removeCallbacksAndMessages(null)
+        scanHandler = android.os.Handler(android.os.Looper.getMainLooper()).apply {
+            postDelayed({
+                scanner.stopScan(callback)
+                if (!isFinishing && !isDestroyed) {
+                    btnScanOnly.isEnabled = true
+                }
+                android.util.Log.d("BleClient", "Activity: 扫描结束，共扫到 $count 个设备")
+            }, 10_000)
+        }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        scanHandler?.removeCallbacksAndMessages(null)
+        scanHandler = null
+    }
+
 
     private fun updateButtonStates() {
         val pairedDevices = sdk.getPairedDevices()
         val count = pairedDevices.size
 
         btnDeviceManager.text = if (count > 0) {
-            "PC 设备管理 (已关联 ${count} 台 PC)"
+            getString(R.string.s_device_manager_paired, count)
         } else {
-            "PC 设备管理 (暂未绑定设备)"
+            getString(R.string.s_device_manager_none)
         }
 
         log("设备状态: 已绑定数量=$count")
     }
+
 }
 
 

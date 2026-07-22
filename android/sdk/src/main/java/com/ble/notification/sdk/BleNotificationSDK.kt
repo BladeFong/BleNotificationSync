@@ -2,12 +2,14 @@ package com.ble.notification.sdk
 
 import android.bluetooth.BluetoothGatt
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
+import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import com.ble.notification.ble.BleClient
 import com.ble.notification.ble.ConnectionCallback
@@ -16,6 +18,9 @@ import com.ble.notification.pairing.PairingCallback
 import com.ble.notification.pairing.PairingManager
 import com.ble.notification.protocol.FrameEncoder
 import com.ble.notification.qr.QrScannerFragment
+import com.ble.notification.ui.DeviceManagerActivity
+import com.ble.notification.ui.DeviceManagerFragment
+import kotlinx.coroutines.flow.StateFlow
 
 interface SendCallback {
     fun onSuccess()
@@ -39,6 +44,8 @@ class BleNotificationSDK private constructor(private val context: Context) {
     private var foregroundLocationLauncher: ActivityResultLauncher<String>? = null
     private var backgroundLocationLauncher: ActivityResultLauncher<String>? = null
 
+    val pairedDevicesState: StateFlow<List<PairedDevice>> = pairingManager.pairedDevicesFlow
+
     companion object {
         @Volatile
         private var instance: BleNotificationSDK? = null
@@ -59,8 +66,6 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
     /**
      * 注册位置权限 Launcher。**必须在 Activity.onCreate() 中调用。**
-     *
-     * registerForActivityResult 要求在 Activity 进入 STARTED 状态前调用。
      */
     fun registerPermissionLaunchers(activity: FragmentActivity) {
         foregroundLocationLauncher = activity.registerForActivityResult(
@@ -78,12 +83,6 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
     /**
      * 统一检查 SDK 所需的所有权限。**在 Activity.onResume() 中调用。**
-     *
-     * 幂等方法，内部自行判断：
-     * 1. BLE 权限 → 缺失则请求
-     * 2. FINE_LOCATION → 缺失则触发两段式第一段
-     * 3. BACKGROUND_LOCATION → FINE 有但 BG 缺失则触发第二段
-     * 4. 都已就绪 → 无操作
      */
     fun ensurePermissions(activity: FragmentActivity) {
         // 1. BLE 权限
@@ -137,6 +136,11 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 return@newInstance
             }
 
+            if (isPaired(qrResult.uuid)) {
+                callback.onError(SdkError.AlreadyPaired())
+                return@newInstance
+            }
+
             callback.onQrResult(qrResult.mac, qrResult.uuid)
 
             pairingManager.startPairing(qrResult, appName, packageName, object : PairingCallback {
@@ -158,35 +162,47 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
     // ── 设备管理 ──
 
-    fun isPaired(packageName: String): Boolean = pairingManager.isPaired(packageName)
+    fun isPaired(uuid: String? = null): Boolean = pairingManager.isPaired(uuid)
 
     fun getPairedDevices(): List<PairedDevice> = pairingManager.getPairedDevices()
 
-    fun unpair(packageName: String) = pairingManager.unpair(packageName)
+    fun unpair(uuid: String) = pairingManager.unpair(uuid)
 
-    fun updatePairedMac(packageName: String, newMac: String) = pairingManager.updateMac(packageName, newMac)
+    fun unpairAll() = pairingManager.unpairAll()
+
+    // ── UI 入口 ──
+
+    fun getDeviceManagerFragment(): Fragment = DeviceManagerFragment()
+
+    fun openDeviceManager(context: Context) {
+        val intent = Intent(context, DeviceManagerActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
 
     // ── 通知发送 ──
 
     fun sendNotification(title: String, body: String, callback: SendCallback? = null) {
         if (checkClosed(callback)) return
-        val packageName = context.packageName
-        val mac = pairingManager.getPairedMac(packageName)
-            ?: run {
-                callback?.onError(SdkError.NotPaired())
-                return
-            }
-        val baseKey = pairingManager.getBaseKey(packageName)
+        val devices = pairingManager.getPairedDevices()
+        if (devices.isEmpty()) {
+            callback?.onError(SdkError.NotPaired())
+            return
+        }
+
+        val targetDevice = devices.first()
+        val baseKey = pairingManager.getBaseKey(targetDevice.uuid)
             ?: run {
                 callback?.onError(SdkError.NotPaired())
                 return
             }
 
-        BleClient.connect(context, mac, object : ConnectionCallback {
+        BleClient.connectWithScan(context, object : ConnectionCallback {
             override fun onReady(gatt: BluetoothGatt) {
                 val frame = FrameEncoder.encodeNotify(
                     key = baseKey,
-                    packageName = packageName,
+                    packageName = context.packageName,
                     title = title,
                     body = body,
                     timestamp = System.currentTimeMillis()
@@ -269,3 +285,4 @@ class BleNotificationSDK private constructor(private val context: Context) {
         return false
     }
 }
+

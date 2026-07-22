@@ -55,6 +55,9 @@ class MainActivity : AppCompatActivity() {
 
         btnScanPair.setOnClickListener { startPairing() }
         btnUnpair.setOnClickListener { doUnpair() }
+        findViewById<Button>(R.id.btn_device_manager).setOnClickListener {
+            sdk.openDeviceManager(this)
+        }
         btnSend.setOnClickListener { doSendReminder() }
         btnScanOnly.setOnClickListener { doScanOnly() }
         findViewById<Button>(R.id.btn_clear_log).setOnClickListener {
@@ -112,19 +115,21 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             override fun onError(error: SdkError) {
-                log("失败: ${error.message}")
+                val msg = if (error is SdkError.AlreadyPaired) "该设备已绑定" else "失败: ${error.message}"
+                log(msg)
                 runOnUiThread { updateButtonStates() }
             }
         })
     }
 
     private fun doUnpair() {
-        sdk.unpair(packageName)
+        sdk.unpairAll()
         val msg = getString(R.string.s_unpaired)
         log(msg)
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         updateButtonStates()
     }
+
 
     private fun doSendReminder() {
         val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
@@ -206,9 +211,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateButtonStates() {
-        val paired = sdk.isPaired(packageName)
-        btnScanPair.isEnabled = !paired
-        btnUnpair.isEnabled = paired
-        log("按钮状态: 绑定=$paired")
+        val pairedDevices = sdk.getPairedDevices()
+        val count = pairedDevices.size
+        btnScanPair.isEnabled = true
+        btnUnpair.isEnabled = count > 0
+
+        findViewById<Button>(R.id.btn_device_manager).text = if (count > 0) {
+            "设备管理 (已关联 ${count} 台 PC)"
+        } else {
+            "设备管理 (暂未绑定 PC)"
+        }
+
+        log("设备状态: 已绑定数量=$count")
     }
 }
+
+

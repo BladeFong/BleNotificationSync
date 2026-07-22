@@ -33,5 +33,11 @@
             android:name="com.ble.notification.sdk.BleForegroundService"
             android:foregroundServiceType="connectedDevice|location"
             android:exported="false" />
+
+        <activity
+            android:name="com.ble.notification.ui.DeviceManagerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
     </application>
+
 </manifest>

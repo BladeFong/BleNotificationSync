@@ -1,5 +1,11 @@
 # Android SDK — 进度日志
 
+## 2026-07-22 — 多 PC 绑定与管理 Fragment 方案头脑风暴与 Spec 编写
+- 完成多 PC 绑定的需求分析与架构设计。
+- 确定以 PC 的固定 UUID 作为持久化 Key（`pairing_$uuid`）。
+- 确定 Compose Material 2 风格内置管理 UI，适配宿主主题色，仅显示设备名。
+- 完成详细设计文档 `docs/superpowers/specs/2026-07-22-multi-pc-pairing-design.md`。
+
 ## 2026-07-15 — SDK API 改进实现
 
 ### 实现内容（7 Tasks，全部完成）

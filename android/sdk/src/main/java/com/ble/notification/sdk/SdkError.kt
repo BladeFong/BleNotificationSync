@@ -16,5 +16,7 @@ sealed class SdkError(val message: String) {
     class EncryptionFailed : SdkError("加密失败")
     class Timeout : SdkError("操作超时")
     class Closed : SdkError("SDK 已关闭")
+    class AlreadyPaired(msg: String = "该设备已绑定") : SdkError(msg)
     class Unknown(cause: String) : SdkError(cause)
 }
+

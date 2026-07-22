@@ -38,6 +38,9 @@ class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_ALARM_TRIGGER) return
 
+        // goAsync: 延长 BroadcastReceiver 生命周期，防止 BLE 操作超时被杀
+        val pending = goAsync()
+
         val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: return
         val title = intent.getStringExtra(EXTRA_TITLE) ?: return
         val body = intent.getStringExtra(EXTRA_BODY) ?: return
@@ -45,6 +48,36 @@ class AlarmReceiver : BroadcastReceiver() {
         createNotificationChannel(context)
         showNotification(context, taskId, title, body)
         trySendBle(context, title, body, taskId)
+        pending.finish()
+    }
+
+    private fun trySendBle(context: Context, title: String, body: String, taskId: String) {
+        // 检查权限状态并输出 log（不请求，仅诊断）
+        val missing = com.ble.notification.ble.BleClient.getMissingPermissions(context)
+        if (missing.isNotEmpty()) {
+            android.util.Log.w("BleClient", "AlarmReceiver: 缺少权限 $missing，扫描可能受限")
+        }
+        val bgLocation = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        android.util.Log.d("BleClient", "AlarmReceiver: ACCESS_BACKGROUND_LOCATION=$bgLocation")
+
+        // 跳过直连 MAC，直接起前台 Service 扫描
+        android.util.Log.d("BleClient", "AlarmReceiver: 启动前台服务扫描")
+        startForegroundService(context, title, body, taskId)
+    }
+
+    private fun startForegroundService(context: Context, title: String, body: String, taskId: String) {
+        val intent = Intent(context, BleForegroundService::class.java).apply {
+            putExtra(BleForegroundService.EXTRA_TITLE, title)
+            putExtra(BleForegroundService.EXTRA_BODY, body)
+            putExtra(BleForegroundService.EXTRA_TASK_ID, taskId)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
     }
 
     private fun showNotification(context: Context, taskId: String, title: String, body: String) {
@@ -74,19 +107,4 @@ class AlarmReceiver : BroadcastReceiver() {
         nm.notify(notificationId, notification)
     }
 
-    private fun trySendBle(context: Context, title: String, body: String, taskId: String) {
-        try {
-            val sdk = BleNotificationSDK.getInstance()
-            sdk.sendNotification(title, body, object : SendCallback {
-                override fun onSuccess() {
-                    sdk.notifySynced(taskId, true)
-                }
-                override fun onError(error: SdkError) {
-                    sdk.notifySynced(taskId, false)
-                }
-            })
-        } catch (_: IllegalStateException) {
-            // SDK not initialized
-        }
-    }
 }

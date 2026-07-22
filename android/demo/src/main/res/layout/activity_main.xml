@@ -55,6 +55,18 @@
 
             <Space
                 android:layout_width="match_parent"
+                android:layout_height="12dp" />
+
+            <Button
+                android:id="@+id/btn_device_manager"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="设备管理 (加载中…)" />
+
+
+
+            <Space
+                android:layout_width="match_parent"
                 android:layout_height="24dp" />
 
             <EditText

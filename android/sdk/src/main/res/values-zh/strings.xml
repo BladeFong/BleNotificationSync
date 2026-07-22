@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="s_qr_scan_hint">扫描二维码以绑定</string>
+    <string name="s_device_manager_title">已关联 PC 设备</string>
+    <string name="s_unpair">解除绑定</string>
+    <string name="s_unpair_confirm_title">解除绑定</string>
+    <string name="s_unpair_confirm_message">确定要解除与 \"%1$s\" 的绑定关系吗？解除后将无法同步通知。</string>
+    <string name="s_cancel">取消</string>
+    <string name="s_paired">已绑定</string>
+    <string name="s_no_paired_devices">暂无绑定的 PC 设备</string>
+    <string name="s_empty_device_hint">点击下方按钮扫描 PC 端二维码进行关联</string>
+    <string name="s_bottom_scan_hint">扫描 PC 端显示的 BLE 二维码进行绑定</string>
+    <string name="s_scan_to_bind_new_device">扫描二维码绑定新设备</string>
+    <string name="s_device_already_paired">该设备已绑定</string>
+    <string name="s_pair_success">绑定成功</string>
+    <string name="s_pair_failed">绑定失败: %1$s</string>
+    <string name="s_back">返回</string>
+    <string name="s_pc_device">PC 设备</string>
+</resources>

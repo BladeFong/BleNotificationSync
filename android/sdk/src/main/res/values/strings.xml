@@ -1,4 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="s_qr_scan_hint">Scan QR code to pair</string>
+    <string name="s_device_manager_title">Paired PC Devices</string>
+    <string name="s_unpair">Unpair</string>
+    <string name="s_unpair_confirm_title">Unpair Device</string>
+    <string name="s_unpair_confirm_message">Are you sure you want to unpair \"%1$s\"? Notifications will no longer sync to this device.</string>
+    <string name="s_cancel">Cancel</string>
+    <string name="s_paired">Paired</string>
+    <string name="s_no_paired_devices">No Paired PC Devices</string>
+    <string name="s_empty_device_hint">Tap button below to scan PC QR code for pairing</string>
+    <string name="s_bottom_scan_hint">Scan BLE QR code on PC to pair</string>
+    <string name="s_scan_to_bind_new_device">Scan QR Code to Pair</string>
+    <string name="s_device_already_paired">This device is already paired</string>
+    <string name="s_pair_success">Pairing successful</string>
+    <string name="s_pair_failed">Pairing failed: %1$s</string>
+    <string name="s_back">Back</string>
+    <string name="s_pc_device">PC Device</string>
 </resources>

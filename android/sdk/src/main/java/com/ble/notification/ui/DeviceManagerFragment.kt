@@ -24,7 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.Fragment
@@ -32,6 +34,7 @@ import androidx.fragment.app.FragmentActivity
 import com.ble.notification.pairing.PairedDevice
 import com.ble.notification.pairing.PairingCallback
 import com.ble.notification.sdk.BleNotificationSDK
+import com.ble.notification.sdk.R
 import com.ble.notification.sdk.SdkError
 
 class DeviceManagerFragment : Fragment() {
@@ -78,12 +81,16 @@ class DeviceManagerFragment : Fragment() {
             override fun onRegistering() {}
             override fun onPaired() {
                 act.runOnUiThread {
-                    Toast.makeText(act, "绑定成功", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(act, getString(R.string.s_pair_success), Toast.LENGTH_SHORT).show()
                 }
             }
             override fun onError(error: SdkError) {
                 act.runOnUiThread {
-                    val msg = if (error is SdkError.AlreadyPaired) "该设备已绑定" else "绑定失败: ${error.message}"
+                    val msg = if (error is SdkError.AlreadyPaired) {
+                        getString(R.string.s_device_already_paired)
+                    } else {
+                        getString(R.string.s_pair_failed, error.message)
+                    }
                     Toast.makeText(act, msg, Toast.LENGTH_SHORT).show()
                 }
             }
@@ -103,7 +110,7 @@ class DeviceManagerFragment : Fragment() {
                 return color
             }
         }
-        return Color(0xFF1565C0) // 经典 Material 深蓝色 (Deep Blue)
+        return Color(0xFF1565C0)
     }
 }
 
@@ -128,7 +135,7 @@ fun DeviceManagerScreen(
                 TopAppBar(
                     title = {
                         Text(
-                            "已关联 PC 设备",
+                            stringResource(R.string.s_device_manager_title),
                             fontWeight = FontWeight.Bold,
                             color = onPrimaryColor
                         )
@@ -137,7 +144,7 @@ fun DeviceManagerScreen(
                         IconButton(onClick = onBackClick) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "返回",
+                                contentDescription = stringResource(R.string.s_back),
                                 tint = onPrimaryColor
                             )
                         }
@@ -176,8 +183,8 @@ fun DeviceManagerScreen(
     deviceToUnpair?.let { device ->
         AlertDialog(
             onDismissRequest = { deviceToUnpair = null },
-            title = { Text("解除绑定", fontWeight = FontWeight.Bold) },
-            text = { Text("确定要解除与 \"${device.name}\" 的绑定关系吗？解除后将无法同步通知。") },
+            title = { Text(stringResource(R.string.s_unpair_confirm_title), fontWeight = FontWeight.Bold) },
+            text = { Text(stringResource(R.string.s_unpair_confirm_message, device.name)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -185,12 +192,12 @@ fun DeviceManagerScreen(
                         deviceToUnpair = null
                     }
                 ) {
-                    Text("解除绑定", color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.s_unpair), color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deviceToUnpair = null }) {
-                    Text("取消", color = Color.Gray)
+                    Text(stringResource(R.string.s_cancel), color = Color.Gray)
                 }
             }
         )
@@ -238,7 +245,7 @@ fun DeviceCard(
             ) {
                 Icon(
                     imageVector = Icons.Default.Computer,
-                    contentDescription = "PC",
+                    contentDescription = stringResource(R.string.s_pc_device),
                     tint = MaterialTheme.colors.primary,
                     modifier = Modifier.size(32.dp)
                 )
@@ -251,7 +258,7 @@ fun DeviceCard(
                         color = Color(0xFF212121)
                     )
                     Text(
-                        text = "已绑定",
+                        text = stringResource(R.string.s_paired),
                         fontSize = 12.sp,
                         color = Color(0xFF757575)
                     )
@@ -264,7 +271,7 @@ fun DeviceCard(
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFD32F2F)),
                 modifier = Modifier.height(36.dp)
             ) {
-                Text("解除绑定", fontSize = 13.sp)
+                Text(stringResource(R.string.s_unpair), fontSize = 13.sp)
             }
         }
     }
@@ -279,20 +286,20 @@ fun EmptyStateView() {
     ) {
         Icon(
             imageVector = Icons.Default.Computer,
-            contentDescription = "无设备",
+            contentDescription = null,
             modifier = Modifier.size(64.dp),
             tint = Color.LightGray
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "暂无绑定的 PC 设备",
+            text = stringResource(R.string.s_no_paired_devices),
             fontSize = 16.sp,
             color = Color(0xFF424242),
             fontWeight = FontWeight.Medium
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "点击下方按钮扫描 PC 端二维码进行关联",
+            text = stringResource(R.string.s_empty_device_hint),
             fontSize = 13.sp,
             color = Color.Gray
         )
@@ -311,18 +318,15 @@ fun BottomBarContent(onAddDeviceClick: () -> Unit) {
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-
             Text(
-                text = "扫描 PC 端显示的 BLE 二维码进行绑定",
+                text = stringResource(R.string.s_bottom_scan_hint),
                 fontSize = 12.sp,
                 color = Color.Gray,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
             )
-
-
 
             Button(
                 onClick = onAddDeviceClick,
@@ -347,7 +351,7 @@ fun BottomBarContent(onAddDeviceClick: () -> Unit) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "扫描二维码绑定新设备",
+                        text = stringResource(R.string.s_scan_to_bind_new_device),
                         fontSize = 15.sp,
                         color = MaterialTheme.colors.onPrimary,
                         fontWeight = FontWeight.Bold
@@ -357,4 +361,3 @@ fun BottomBarContent(onAddDeviceClick: () -> Unit) {
         }
     }
 }
-

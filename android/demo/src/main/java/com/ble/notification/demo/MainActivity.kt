@@ -186,7 +186,8 @@ class MainActivity : AppCompatActivity() {
         val callback = object : android.bluetooth.le.ScanCallback() {
             override fun onScanResult(callbackType: Int, result: android.bluetooth.le.ScanResult) {
                 count++
-                android.util.Log.d("BleClient", "Activity Scan hit #${count}: ${result.device.address} name=${result.device.name} rssi=${result.rssi}")
+                android.util.Log.d("BleClient", "Activity Scan hit #${count}: name=${result.device.name} rssi=${result.rssi}")
+
             }
             override fun onBatchScanResults(results: MutableList<android.bluetooth.le.ScanResult>?) {
                 android.util.Log.d("BleClient", "Activity onBatchScanResults: ${results?.size ?: 0} results")

@@ -1,6 +1,11 @@
 # Android SDK — 进度日志
 
+## 2026-07-22 — 日志净化：清理 MAC 地址日志，引入 Android ID、手机设备名与 PC UUID
+- 全面清理日志：移除了 `PairingManager`、`BleClient`、`BleScanWorker` 及 Demo `MainActivity` 中所有输出 MAC 地址的日志。
+- 替换为规范标识：配对与设备管理日志统一格式化输出 `android_id` (`Settings.Secure.ANDROID_ID`)、手机设备名 (`Build.MODEL`) 以及 PC 的 `pc_uuid` / `pc_name`，避免重复与敏感 MAC 地址泄漏。
+
 ## 2026-07-22 — 规范 Fragment 加栈架构：移除 QrScannerFragment 内部固化操作，由管理者纳管
+
 - 彻底解耦 `QrScannerFragment`：移除其内部自我销毁与固化出栈代码，使其保持 100% 纯粹透明的独立功能组件。
 - 规范加栈纳管：由 `DeviceManagerFragment` 作为管理者在其 `parentFragmentManager` 中执行 `replace` 并添加匿名栈 (`addToBackStack(null)`)，且在扫码回调触发时由管理者出栈 (`popBackStack()`)，彻底消除 SDK 内部硬编码字符串 Tag 对宿主导航栈的固化侵入。
 

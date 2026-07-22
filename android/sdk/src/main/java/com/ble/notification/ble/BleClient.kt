@@ -78,7 +78,7 @@ object BleClient {
         val cb = object : android.bluetooth.le.ScanCallback() {
             override fun onScanResult(callbackType: Int, result: android.bluetooth.le.ScanResult) {
                 if (finished) return
-                android.util.Log.d("BleClient", "Scan hit: ${result.device.address} rssi=${result.rssi} name=${result.device.name}")
+                android.util.Log.d("BleClient", "Scan hit: pc_name=${result.device.name} rssi=${result.rssi}")
                 val uuids = result.scanRecord?.serviceUuids
                 val rawBytes = result.scanRecord?.bytes?.joinToString(" ") { "%02x".format(it) }
                 android.util.Log.d("BleClient", "  bytes=$rawBytes")
@@ -135,7 +135,7 @@ object BleClient {
         handler.postDelayed({
             if (!finished) {
                 finished = true
-                android.util.Log.w("BleClient", "Direct connect timeout: $mac")
+                android.util.Log.w("BleClient", "Direct connect timeout")
                 gattRef?.let { it.disconnect(); it.close() }
                 callback.onError(SdkError.ConnectionFailed("timeout"))
             }
@@ -152,7 +152,8 @@ object BleClient {
         if (device == null) { callback.onError(SdkError.DeviceNotFound(mac)); return }
 
         servicesDone = false; mtuDone = false; readyCalled = false
-        android.util.Log.d("BleClient", "connectGatt: $mac")
+        android.util.Log.d("BleClient", "connectGatt to target device")
+
         gattRef = device.connectGatt(context, false, object : BluetoothGattCallback() {
             override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
                 android.util.Log.d("BleClient", "Connection: status=$status newState=$newState")

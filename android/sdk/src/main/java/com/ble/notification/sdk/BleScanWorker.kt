@@ -46,7 +46,7 @@ class BleScanWorker(
                 return Result.failure()
             }
 
-            android.util.Log.d("BleClient", "WorkManager: 扫描到设备 ${scanResult.device.address}，尝试连接")
+            android.util.Log.d("BleClient", "WorkManager: 扫描到设备 ${scanResult.device.name ?: "PC"}，尝试连接")
             val connected = connectAndSend(scanResult.device.address, title, body)
             if (connected) {
                 android.util.Log.d("BleClient", "WorkManager: 发送成功")
@@ -78,7 +78,8 @@ class BleScanWorker(
             val callback = object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult) {
                     if (found) return
-                    android.util.Log.d("BleClient", "WorkManager Scan hit: ${result.device.address} name=${result.device.name}")
+                    android.util.Log.d("BleClient", "WorkManager Scan hit: pc_name=${result.device.name}")
+
                     val uuids = result.scanRecord?.serviceUuids
                     if (uuids != null && uuids.contains(android.os.ParcelUuid(BleClient.SERVICE_UUID))) {
                         found = true

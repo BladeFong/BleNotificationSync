@@ -136,7 +136,11 @@ class PairingManager(private val context: Context) {
                     val baseKey = deriveBaseKey(packageName, random)
                     val actualMac = gatt.device.address
                     val deviceName = qrResult.name ?: gatt.device.name ?: "PC Device"
-                    android.util.Log.d("BleClient", "Saving pairing: uuid=${qrResult.uuid} QR_MAC=${qrResult.mac} actual_MAC=$actualMac deviceName=$deviceName")
+                    android.util.Log.d(
+                        "BleClient",
+                        "Saving pairing: pc_uuid=${qrResult.uuid} pc_name=$deviceName android_id=${getAndroidId()} phone_device=${getDeviceName()}"
+                    )
+
                     savePairing(qrResult.uuid, deviceName, appName, baseKey)
                     transitionTo(PairingState.PAIRED, callback)
                     callback.onPaired()

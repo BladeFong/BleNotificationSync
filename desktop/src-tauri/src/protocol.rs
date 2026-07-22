@@ -31,6 +31,12 @@ pub fn parse_frame(data: &[u8]) -> Option<Frame> {
     let msg_type = data[2];
     let seq = data[3];
     let total_seq = data[4];
+    
+    // 验证 total_seq 不为 0，且 seq 在有效范围内
+    if total_seq == 0 || seq >= total_seq {
+        return None;
+    }
+    
     let payload = data[FRAME_HEADER_SIZE..].to_vec();
     
     Some(Frame {

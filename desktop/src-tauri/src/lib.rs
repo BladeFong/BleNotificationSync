@@ -70,6 +70,11 @@ pub struct AppState {
     pub _tray_icon: Mutex<Option<TrayIcon>>,
 }
 
+/// # Safety
+///
+/// AppState 的所有字段都通过 Mutex 保护，CheckMenuItem 和 TrayIcon
+/// 只在主线程（setup 阶段）创建，其他线程只通过 Mutex 同步访问。
+/// Tauri 的状态管理系统需要 Send + Sync，因此手动实现是安全的。
 unsafe impl Send for AppState {}
 unsafe impl Sync for AppState {}
 
@@ -119,6 +124,7 @@ pub fn run() {
             ble::stop_gatt_server,
             ble::get_status,
             ble::get_mac_address,
+            ble::get_device_info,
             storage::get_paired_devices,
             storage::add_paired_device,
             storage::remove_paired_device,

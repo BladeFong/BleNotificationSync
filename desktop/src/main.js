@@ -19,7 +19,11 @@ function addLog(message) {
     const timestamp = new Date().toLocaleTimeString();
     const entry = document.createElement('div');
     entry.className = 'log-entry';
-    entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+    const timestampSpan = document.createElement('span');
+    timestampSpan.className = 'timestamp';
+    timestampSpan.textContent = `[${timestamp}]`;
+    entry.appendChild(timestampSpan);
+    entry.appendChild(document.createTextNode(' ' + message));
     logBox.appendChild(entry);
     logBox.scrollTop = logBox.scrollHeight;
 }
@@ -75,14 +79,16 @@ pairBtn.addEventListener('click', () => {
     `;
     document.body.appendChild(dialog);
 
-    // Async fetch MAC address
-    invoke('get_mac_address').then(mac => {
+    // Async fetch device info
+    invoke('get_device_info').then(info => {
         const macDisplay = document.getElementById('macDisplay');
         const qrContainer = document.getElementById('qrContainer');
         if (!macDisplay || !qrContainer) return;
 
-        macDisplay.textContent = `MAC: ${mac}`;
-        const qrContent = `ble://pair?mac=${mac}&uuid=${uuid}`;
+        const mac = info.mac;
+        const name = info.name;
+        macDisplay.textContent = `MAC: ${mac} (${name})`;
+        const qrContent = `ble://pair?mac=${mac}&uuid=${uuid}&name=${encodeURIComponent(name)}`;
 
         // Replace loading spinner with real QR code
         qrContainer.innerHTML = '';
@@ -93,11 +99,11 @@ pairBtn.addEventListener('click', () => {
         qrContainer.querySelector('svg').style.width = '200px';
         qrContainer.querySelector('svg').style.height = '200px';
 
-        addLog(`${isChinese ? '显示绑定二维码' : 'Showing pairing QR code'}: ${mac}`);
+        addLog(`${isChinese ? '显示绑定二维码' : 'Showing pairing QR code'}: ${mac} (${name})`);
     }).catch(error => {
         const macDisplay = document.getElementById('macDisplay');
         if (macDisplay) macDisplay.textContent = `${isChinese ? '获取失败' : 'Failed'}: ${error}`;
-        addLog(`${isChinese ? '获取 MAC 失败' : 'Failed to get MAC'}: ${error}`);
+        addLog(`${isChinese ? '获取设备信息失败' : 'Failed to get device info'}: ${error}`);
     });
 });
 

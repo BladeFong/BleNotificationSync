@@ -1,5 +1,18 @@
 # Progress Log
 
+## 2026-07-22 — 桌面端代码审查与安全修复
+
+- **审查范围**：Tauri v2 桌面端（Rust 后端 + Vanilla JS 前端）
+- **已修复问题**：
+  - 命令注入（config.rs）：PS 脚本改用 `$args[0]` 参数化传递
+  - XSS（main.js）：`innerHTML` 改为 `textContent` + `createTextNode`
+  - PowerShell 注入（notify.rs）：改用 `-args` 参数化传递
+  - 协议验证（protocol.rs）：添加 `total_seq` 和 `seq` 边界校验
+- **已处理问题**：
+  - unsafe impl Send/Sync（lib.rs）：添加 `# Safety` 文档说明
+- **验证为误报**：Mutex 死锁（所有场景锁顺序一致）
+- **待处理项**：错误处理统一、i18n 方案、资源管理优化
+
 ## Session: 2026-07-21 — SDK 权限 API 重构 + BLE 后台扫描排查
 
 - **Status:** 权限 API 重构完成，BLE 后台扫描问题待最终验证

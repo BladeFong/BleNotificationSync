@@ -37,17 +37,23 @@ class FrameEncoderTest {
 
     @Test
     fun `encodeRegister payload is valid JSON`() {
-        val frame = FrameEncoder.encodeRegister("TestApp", "com.example.test", ByteArray(32))
+        val frame = FrameEncoder.encodeRegister(
+            "TestApp", "com.example.test", ByteArray(32),
+            androidId = "android_123", deviceName = "Pixel 7"
+        )
         val payload = String(frame, HEADER_SIZE, frame.size - HEADER_SIZE, Charsets.UTF_8)
 
         assertTrue("payload should contain app_name", payload.contains("\"app_name\""))
         assertTrue("payload should contain package", payload.contains("\"package\""))
         assertTrue("payload should contain random", payload.contains("\"random\""))
-        assertTrue("payload should contain TestApp", payload.contains("TestApp"))
-        assertTrue("payload should contain com.example.test", payload.contains("com.example.test"))
+        assertTrue("payload should contain android_id", payload.contains("\"android_id\""))
+        assertTrue("payload should contain device_name", payload.contains("\"device_name\""))
+        assertTrue("payload should contain android_123", payload.contains("android_123"))
+        assertTrue("payload should contain Pixel 7", payload.contains("Pixel 7"))
         assertTrue("payload should start with {", payload.startsWith("{"))
         assertTrue("payload should end with }", payload.endsWith("}"))
     }
+
 
     // ── NOTIFY ──────────────────────────────────────────────────
 

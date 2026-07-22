@@ -111,9 +111,12 @@ class PairingManager(private val context: Context) {
                     val registerFrame = FrameEncoder.encodeRegister(
                         appName = appName,
                         packageName = packageName,
-                        random = random
+                        random = random,
+                        androidId = getAndroidId(),
+                        deviceName = getDeviceName()
                     )
                     android.util.Log.d("BleClient", "REGISTER frame: ${registerFrame.size} bytes")
+
 
                     val service = gatt.getService(BleClient.SERVICE_UUID)
                     if (service == null) {
@@ -245,5 +248,22 @@ class PairingManager(private val context: Context) {
             com.ble.notification.crypto.NativeCrypto.SALT, ikm, 32
         ) ?: throw IllegalStateException("HKDF key derivation failed")
     }
+
+    private fun getAndroidId(): String {
+        return android.provider.Settings.Secure.getString(
+            context.contentResolver,
+            android.provider.Settings.Secure.ANDROID_ID
+        ) ?: "unknown_android"
+    }
+
+    private fun getDeviceName(): String {
+        return try {
+            val name = android.provider.Settings.Global.getString(context.contentResolver, "device_name")
+            if (name.isNullOrBlank()) android.os.Build.MODEL else name
+        } catch (e: Exception) {
+            android.os.Build.MODEL ?: "Android Device"
+        }
+    }
 }
+
 

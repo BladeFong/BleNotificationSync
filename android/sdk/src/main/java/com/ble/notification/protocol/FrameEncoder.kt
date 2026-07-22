@@ -19,17 +19,33 @@ object FrameEncoder {
      * @param appName display name of the app
      * @param packageName Android package name
      * @param random random bytes for authentication challenge (32 bytes)
+     * @param androidId Android ID of the device
+     * @param deviceName friendly device name (e.g. Model)
      * @return encoded frame bytes
      */
-    fun encodeRegister(appName: String, packageName: String, random: ByteArray): ByteArray {
+    fun encodeRegister(
+        appName: String,
+        packageName: String,
+        random: ByteArray,
+        androidId: String? = null,
+        deviceName: String? = null
+    ): ByteArray {
         val randomHex = random.joinToString("") { "%02x".format(it) }
-        val json = buildJson(
+        val fields = mutableListOf<Pair<String, String>>(
             "app_name" to jsonString(appName),
             "package" to jsonString(packageName),
             "random" to jsonString(randomHex)
         )
+        if (!androidId.isNullOrBlank()) {
+            fields.add("android_id" to jsonString(androidId))
+        }
+        if (!deviceName.isNullOrBlank()) {
+            fields.add("device_name" to jsonString(deviceName))
+        }
+        val json = buildJson(*fields.toTypedArray())
         return buildFrame(MessageType.REGISTER, 0, 1, json.toByteArray(Charsets.UTF_8))
     }
+
 
     /**
      * Encode a NOTIFY frame with AES-GCM encryption.

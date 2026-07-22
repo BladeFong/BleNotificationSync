@@ -20,8 +20,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var sdk: BleNotificationSDK
     private lateinit var toolbar: Toolbar
-    private lateinit var btnScanPair: Button
-    private lateinit var btnUnpair: Button
+    private lateinit var btnDeviceManager: Button
     private lateinit var etMessage: EditText
     private lateinit var btnSend: Button
     private lateinit var btnScanOnly: Button
@@ -47,17 +46,15 @@ class MainActivity : AppCompatActivity() {
         sdk.registerPermissionLaunchers(this)
         tvLog = findViewById(R.id.tv_log)
 
-        btnScanPair = findViewById(R.id.btn_scan_pair)
-        btnUnpair = findViewById(R.id.btn_unpair)
+        btnDeviceManager = findViewById(R.id.btn_device_manager)
         etMessage = findViewById(R.id.et_message)
         btnSend = findViewById(R.id.btn_send)
         btnScanOnly = findViewById(R.id.btn_scan_only)
 
-        btnScanPair.setOnClickListener { startPairing() }
-        btnUnpair.setOnClickListener { doUnpair() }
-        findViewById<Button>(R.id.btn_device_manager).setOnClickListener {
+        btnDeviceManager.setOnClickListener {
             sdk.openDeviceManager(this)
         }
+
         btnSend.setOnClickListener { doSendReminder() }
         btnScanOnly.setOnClickListener { doScanOnly() }
         findViewById<Button>(R.id.btn_clear_log).setOnClickListener {
@@ -213,17 +210,16 @@ class MainActivity : AppCompatActivity() {
     private fun updateButtonStates() {
         val pairedDevices = sdk.getPairedDevices()
         val count = pairedDevices.size
-        btnScanPair.isEnabled = true
-        btnUnpair.isEnabled = count > 0
 
-        findViewById<Button>(R.id.btn_device_manager).text = if (count > 0) {
-            "设备管理 (已关联 ${count} 台 PC)"
+        btnDeviceManager.text = if (count > 0) {
+            "PC 设备管理 (已关联 ${count} 台 PC)"
         } else {
-            "设备管理 (暂未绑定 PC)"
+            "PC 设备管理 (暂未绑定设备)"
         }
 
         log("设备状态: 已绑定数量=$count")
     }
 }
+
 
 

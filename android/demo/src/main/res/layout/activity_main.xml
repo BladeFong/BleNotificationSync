@@ -35,33 +35,16 @@
 
             <Space
                 android:layout_width="match_parent"
-                android:layout_height="48dp" />
-
-            <Button
-                android:id="@+id/btn_scan_pair"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/s_scan_pair" />
-
-            <Space
-                android:layout_width="match_parent"
-                android:layout_height="12dp" />
-
-            <Button
-                android:id="@+id/btn_unpair"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/s_unpair" />
-
-            <Space
-                android:layout_width="match_parent"
-                android:layout_height="12dp" />
+                android:layout_height="24dp" />
 
             <Button
                 android:id="@+id/btn_device_manager"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="设备管理 (加载中…)" />
+                android:layout_height="56dp"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:text="PC 设备管理 (加载中…)" />
+
 
 
 

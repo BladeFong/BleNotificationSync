@@ -71,122 +71,44 @@ pub fn save_config(config: &AppConfig) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| format!("写入配置失败: {}", e))
 }
 
-/// 通过 Windows Credential Manager 存储 baseKey
-/// Service: ble-notification-sync, Username: {device_id}:{package}, Password: key_hex
-#[cfg(target_os = "windows")]
+/// 创建 keyring 条目
+fn create_keyring_entry(device_id: &str, package: &str) -> Result<keyring::Entry, String> {
+    let service = "ble-notification-sync";
+    let username = format!("{}:{}", device_id, package);
+    keyring::Entry::new(service, &username)
+        .map_err(|e| format!("创建 keyring 条目失败: {}", e))
+}
+
+/// 存储 baseKey 到系统安全存储
+/// Windows: Credential Manager, macOS: Keychain, Linux: Secret Service
 pub fn store_base_key(device_id: &str, package: &str, key: &[u8; 32]) -> Result<(), String> {
-    use std::os::windows::process::CommandExt;
-    let target = format!("BleNotificationSync/{}/{}", device_id, package);
+    let entry = create_keyring_entry(device_id, package)?;
     let key_hex = hex::encode(key);
-
-    let output = std::process::Command::new("cmdkey")
-        .args(&[
-            &format!("/generic:{}", target),
-            &format!("/user:{}:{}", device_id, package),
-            &format!("/pass:{}", key_hex),
-        ])
-        .creation_flags(0x08000000)
-        .output()
-        .map_err(|e| format!("cmdkey 调用失败: {}", e))?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err("cmdkey 执行失败".to_string())
-    }
+    entry.set_password(&key_hex)
+        .map_err(|e| format!("存储密钥失败: {}", e))
 }
 
-#[cfg(not(target_os = "windows"))]
-pub fn store_base_key(_device_id: &str, _package: &str, _key: &[u8; 32]) -> Result<(), String> {
-    Err("Credential Manager only supported on Windows".to_string())
-}
-
-/// 从 Windows Credential Manager 读取 baseKey
-#[cfg(target_os = "windows")]
+/// 从系统安全存储读取 baseKey
 pub fn get_base_key(device_id: &str, package: &str) -> Result<[u8; 32], String> {
-    use std::os::windows::process::CommandExt;
-    let target = format!("BleNotificationSync/{}/{}", device_id, package);
-
-    // 安全说明：device_id 来自 Android ANDROID_ID（64位十六进制），package 是 Android 包名
-    // （只包含字母、数字、`.`、`_`），这些字符不会导致 PowerShell 命令注入
-    let ps_cmd = format!(
-        r#"$def = @'
-using System;
-using System.Runtime.InteropServices;
-public class Cred {{
-    [DllImport("advapi32.dll", EntryPoint = "CredReadW", CharSet = CharSet.Unicode)]
-    public static extern bool CredRead(string target, int type, int flags, out IntPtr ptr);
-    [DllImport("advapi32.dll", EntryPoint = "CredFree")]
-    public static extern void CredFree(IntPtr ptr);
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct PCREDENTIAL {{
-        public int Flags;
-        public int Type;
-        public string TargetName;
-        public string Comment;
-        public uint dwLowDateTime;
-        public uint dwHighDateTime;
-        public int CredentialBlobSize;
-        public IntPtr CredentialBlob;
-        public int Persist;
-        public int AttributeCount;
-        public IntPtr Attributes;
-        public string TargetAlias;
-        public string UserName;
-    }}
-    public static string Get(string target) {{
-        IntPtr ptr;
-        if (CredRead(target, 1, 0, out ptr)) {{
-            PCREDENTIAL cred = (PCREDENTIAL)Marshal.PtrToStructure(ptr, typeof(PCREDENTIAL));
-            string password = Marshal.PtrToStringUni(cred.CredentialBlob, cred.CredentialBlobSize / 2);
-            CredFree(ptr);
-            return password;
-        }}
-        return "";
-    }}
-}}
-'@; Add-Type -TypeDefinition $def; [Cred]::Get('{}')
-"#,
-        target.replace('\'', "''")
-    );
-    let output = std::process::Command::new("powershell")
-        .args(&["-NoProfile", "-Command", &ps_cmd])
-        .creation_flags(0x08000000)
-        .output()
-        .map_err(|e| format!("PowerShell 调用失败: {}", e))?;
-
-    let key_hex = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if key_hex.is_empty() || key_hex.len() != 64 {
-        return Err("获取 key 失败".to_string());
+    let entry = create_keyring_entry(device_id, package)?;
+    let key_hex = entry.get_password()
+        .map_err(|e| format!("获取密钥失败: {}", e))?;
+    
+    let bytes = hex::decode(&key_hex)
+        .map_err(|e| format!("hex 解码失败: {}", e))?;
+    
+    if bytes.len() != 32 {
+        return Err("密钥长度错误".to_string());
     }
-
-    let bytes = hex::decode(&key_hex).map_err(|e| format!("hex 解码失败: {}", e))?;
+    
     let mut key = [0u8; 32];
     key.copy_from_slice(&bytes);
     Ok(key)
 }
 
-#[cfg(not(target_os = "windows"))]
-pub fn get_base_key(_device_id: &str, _package: &str) -> Result<[u8; 32], String> {
-    Err("Credential Manager only supported on Windows".to_string())
-}
-
-/// 从 Windows Credential Manager 删除 baseKey
-#[cfg(target_os = "windows")]
+/// 从系统安全存储删除 baseKey
 pub fn delete_base_key(device_id: &str, package: &str) -> Result<(), String> {
-    use std::os::windows::process::CommandExt;
-    let target = format!("BleNotificationSync/{}/{}", device_id, package);
-
-    std::process::Command::new("cmdkey")
-        .args(&[&format!("/delete:{}", target)])
-        .creation_flags(0x08000000)
-        .output()
-        .map_err(|e| format!("cmdkey 删除失败: {}", e))?;
-
-    Ok(())
-}
-
-#[cfg(not(target_os = "windows"))]
-pub fn delete_base_key(_device_id: &str, _package: &str) -> Result<(), String> {
-    Err("Credential Manager only supported on Windows".to_string())
+    let entry = create_keyring_entry(device_id, package)?;
+    entry.delete_credential()
+        .map_err(|e| format!("删除密钥失败: {}", e))
 }

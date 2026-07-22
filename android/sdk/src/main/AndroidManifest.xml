@@ -36,8 +36,8 @@
 
         <activity
             android:name="com.ble.notification.ui.DeviceManagerActivity"
-            android:exported="false"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+            android:exported="false" />
     </application>
+
 
 </manifest>

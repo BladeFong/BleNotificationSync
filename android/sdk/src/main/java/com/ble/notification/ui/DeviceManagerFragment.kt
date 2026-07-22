@@ -98,21 +98,33 @@ class DeviceManagerFragment : Fragment() {
     }
 
     private fun getHostPrimaryColor(context: Context): Color {
-        val typedValue = TypedValue()
         val theme = context.theme
-        val hasColor = theme.resolveAttribute(androidx.appcompat.R.attr.colorPrimary, typedValue, true) ||
-                theme.resolveAttribute(android.R.attr.colorPrimary, typedValue, true)
+        val attrIds = intArrayOf(
+            androidx.appcompat.R.attr.colorPrimary,
+            android.R.attr.colorPrimary
+        )
 
-        if (hasColor && typedValue.data != 0) {
-            val color = Color(typedValue.data)
-            val luminance = 0.299f * color.red + 0.587f * color.green + 0.114f * color.blue
-            if (luminance < 0.85f) {
-                return color
+        for (attrId in attrIds) {
+            val typedValue = TypedValue()
+            if (theme.resolveAttribute(attrId, typedValue, true)) {
+                val typedArray = theme.obtainStyledAttributes(intArrayOf(attrId))
+                val colorInt = typedArray.getColor(0, 0)
+                typedArray.recycle()
+
+                if (colorInt != 0) {
+                    val color = Color(colorInt)
+                    val luminance = 0.299f * color.red + 0.587f * color.green + 0.114f * color.blue
+                    if (luminance < 0.95f && color.alpha > 0.1f) {
+                        return color
+                    }
+                }
             }
         }
-        return Color(0xFF1565C0)
+        return Color(0xFF2196F3)
     }
 }
+
+
 
 @Composable
 fun DeviceManagerScreen(

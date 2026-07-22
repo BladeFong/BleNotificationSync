@@ -131,6 +131,8 @@ class BleNotificationSDK private constructor(private val context: Context) {
         val packageName = context.packageName
 
         val fragment = QrScannerFragment.newInstance { qrResult ->
+            activity.supportFragmentManager.popBackStack("ble_pairing", androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE)
+
             if (qrResult == null) {
                 callback.onError(SdkError.Unknown("QR scan cancelled or failed"))
                 return@newInstance
@@ -142,7 +144,6 @@ class BleNotificationSDK private constructor(private val context: Context) {
             }
 
             callback.onQrResult(qrResult.mac ?: "", qrResult.uuid)
-
 
             pairingManager.startPairing(qrResult, appName, packageName, object : PairingCallback {
                 override fun onScanSuccess() = callback.onScanSuccess()
@@ -160,6 +161,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
             .addToBackStack("ble_pairing")
             .commit()
     }
+
 
     // ── 设备管理 ──
 

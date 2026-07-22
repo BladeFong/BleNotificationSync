@@ -316,8 +316,12 @@ fun BottomBarContent(onAddDeviceClick: () -> Unit) {
                 text = "扫描 PC 端显示的 BLE 二维码进行绑定",
                 fontSize = 12.sp,
                 color = Color.Gray,
-                modifier = Modifier.padding(bottom = 8.dp)
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
             )
+
 
 
             Button(

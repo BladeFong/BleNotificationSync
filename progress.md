@@ -1,5 +1,18 @@
 # Progress Log
 
+## 2026-07-22 — keyring crate 集成（跨平台安全存储）
+
+- **改动内容**：
+  - 使用 `keyring` crate 替代 Windows 特定的 `cmdkey`/PowerShell 实现
+  - 移除 106 行平台特定代码，替换为 31 行跨平台 API
+  - 统一接口：`store_base_key` / `get_base_key` / `delete_base_key`
+- **支持平台**：
+  - Windows: Credential Manager
+  - macOS: Keychain
+  - Linux: Secret Service (libsecret)
+- **依赖**：`keyring = "4"` (v4.1.5)
+- **注意**：需要重新绑定，旧的 `cmdkey` 存储的密钥不兼容
+
 ## 2026-07-22 — 桌面端设备标识重构（移除 MAC 地址）
 
 - **改动内容**：

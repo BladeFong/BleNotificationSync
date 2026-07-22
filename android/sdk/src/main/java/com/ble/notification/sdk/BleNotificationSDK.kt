@@ -141,7 +141,8 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 return@newInstance
             }
 
-            callback.onQrResult(qrResult.mac, qrResult.uuid)
+            callback.onQrResult(qrResult.mac ?: "", qrResult.uuid)
+
 
             pairingManager.startPairing(qrResult, appName, packageName, object : PairingCallback {
                 override fun onScanSuccess() = callback.onScanSuccess()

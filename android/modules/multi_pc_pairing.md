@@ -9,7 +9,9 @@
 
 ## 技术决策与踩坑记录
 - **放弃随机 MAC 做主键**：BLE GATT 获得的 MAC 地址由于 privacy 机制存在随机化（RPA），频繁改变，不可作为设备持久化主键。改成 PC 二维码中的固定 `uuid` 作为 Key (`pairing_$uuid`)。
+- **二维码协议兼容**：PC 端在最新版本中去除了随机改变的 MAC 地址，仅保留 `uuid` 和 `name`（格式 `ble://pair?uuid=${uuid}&name=${name}`）。SDK 端的 `QrDecoder` 调整为只强校验 `uuid` 参数，`mac` 改为可选解析。
 - **设备唯一标识对齐**：针对多 Android 设备相同 App 绑定同一 PC 的场景，在 REGISTER 帧的 JSON 荷载中带上 `android_id` 和 `device_name`。PC 端将以 `android_id` 作为区分不同手机设备的唯一标识。
+
 - **宿主 Activity 主题继承**：SDK 内置 Activity (`DeviceManagerActivity`) 不在 Manifest 中硬编码 `android:theme`，以便其启动时 100% 继承宿主 `<application android:theme="...">` 中定义的主题。
 
 - **Compose 动态解包宿主 XML 属性**：针对 `@color/...` 引用资源，`TypedValue.data` 返回的是 Resource ID，不能直接转 Color。采用 `theme.obtainStyledAttributes(intArrayOf(attrId)).getColor(0, 0)` 解包底层的真实 ColorInt，完全兼容 AppCompat / MD3 主题。

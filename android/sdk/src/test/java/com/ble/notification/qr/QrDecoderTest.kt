@@ -27,10 +27,15 @@ class QrDecoderTest {
     }
 
     @Test
-    fun `parseQrCode returns null for missing mac`() {
-        val url = "ble://pair?uuid=0000A1B2-0000-1000-8000-00805F9B34FB"
-        assertNull(QrDecoder.parseQrCode(url))
+    fun `parseQrCode parses URL without mac`() {
+        val url = "ble://pair?uuid=0000A1B2-0000-1000-8000-00805F9B34FB&name=My%20PC"
+        val result = QrDecoder.parseQrCode(url)
+
+        assertEquals("0000A1B2-0000-1000-8000-00805F9B34FB", result?.uuid)
+        assertEquals("My PC", result?.name)
+        assertNull(result?.mac)
     }
+
 
     @Test
     fun `parseQrCode returns null for missing uuid`() {

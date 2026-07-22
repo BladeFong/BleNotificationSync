@@ -1,6 +1,6 @@
 package com.ble.notification.qr
 
-data class QrResult(val mac: String, val uuid: String, val name: String? = null)
+data class QrResult(val uuid: String, val mac: String? = null, val name: String? = null)
 
 object QrDecoder {
 
@@ -25,8 +25,8 @@ object QrDecoder {
                 if (parts.size == 2) parts[0] to parts[1] else parts[0] to ""
             }
 
-        val mac = params["mac"]?.takeIf { it.isNotBlank() } ?: return null
         val uuid = params["uuid"]?.takeIf { it.isNotBlank() } ?: return null
+        val mac = params["mac"]?.takeIf { it.isNotBlank() }
         val name = params["name"]?.takeIf { it.isNotBlank() }?.let {
             try {
                 java.net.URLDecoder.decode(it, "UTF-8")
@@ -35,6 +35,7 @@ object QrDecoder {
             }
         }
 
-        return QrResult(mac, uuid, name)
+        return QrResult(uuid = uuid, mac = mac, name = name)
     }
 }
+

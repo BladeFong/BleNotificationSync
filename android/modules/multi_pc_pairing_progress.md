@@ -1,6 +1,11 @@
 # 多 PC 绑定 — 模块进度日志
 
+## 2026-07-22 — 二维码解析适配：去除强校验 mac 参数，兼容 PC 端最新 URI
+- 解决扫码无法识别问题：PC 端最新生成的二维码 URI (`ble://pair?uuid=...&name=...`) 中去除了随机改变的 `mac` 参数。
+- 重构 `QrDecoder` 与 `QrResult`：将 `mac` 改为可选字段，`uuid` 作为唯一核心必填项，更新 `QrDecoderTest` 单元测试通过。
+
 ## 2026-07-22 — 对齐 PC 端设备标识：增加 android_id 和 device_name 发送
+
 - 对齐 PC/Desktop 端 Protocol 变更：在 REGISTER 注册帧中带上设备的 `android_id` (`Settings.Secure.ANDROID_ID`) 及友好设备名称 `device_name` (`Build.MODEL` / `device_name`)。
 - 解决多 Android 设备相同应用关联同一 PC 时的标识区分问题，完成单元测试与真机覆盖安装。
 

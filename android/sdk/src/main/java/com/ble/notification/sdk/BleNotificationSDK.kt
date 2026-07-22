@@ -126,41 +126,46 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
     // ── 配对流程 ──
 
-    fun startPairing(activity: FragmentActivity, appName: String, callback: PairingCallback) {
+    fun startPairingDirectly(activity: FragmentActivity, qrResult: com.ble.notification.qr.QrResult, callback: PairingCallback) {
         if (checkClosed(callback)) return
+        val appName = "DeviceManager"
         val packageName = context.packageName
 
-        val fragment = QrScannerFragment.newInstance { qrResult ->
-            activity.supportFragmentManager.popBackStack("ble_pairing", androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE)
+        if (isPaired(qrResult.uuid)) {
+            callback.onError(SdkError.AlreadyPaired())
+            return
+        }
 
+        callback.onQrResult(qrResult.mac ?: "", qrResult.uuid)
+
+        pairingManager.startPairing(qrResult, appName, packageName, object : PairingCallback {
+            override fun onScanSuccess() = callback.onScanSuccess()
+            override fun onConnecting() = callback.onConnecting()
+            override fun onRegistering() = callback.onRegistering()
+            override fun onPaired() {
+                callback.onPaired()
+            }
+            override fun onError(error: SdkError) = callback.onError(error)
+        })
+    }
+
+    fun startPairing(activity: FragmentActivity, appName: String, callback: PairingCallback) {
+        if (checkClosed(callback)) return
+
+        val fragment = QrScannerFragment.newInstance { qrResult ->
             if (qrResult == null) {
                 callback.onError(SdkError.Unknown("QR scan cancelled or failed"))
                 return@newInstance
             }
 
-            if (isPaired(qrResult.uuid)) {
-                callback.onError(SdkError.AlreadyPaired())
-                return@newInstance
-            }
-
-            callback.onQrResult(qrResult.mac ?: "", qrResult.uuid)
-
-            pairingManager.startPairing(qrResult, appName, packageName, object : PairingCallback {
-                override fun onScanSuccess() = callback.onScanSuccess()
-                override fun onConnecting() = callback.onConnecting()
-                override fun onRegistering() = callback.onRegistering()
-                override fun onPaired() {
-                    callback.onPaired()
-                }
-                override fun onError(error: SdkError) = callback.onError(error)
-            })
+            startPairingDirectly(activity, qrResult, callback)
         }
 
         activity.supportFragmentManager.beginTransaction()
             .replace(android.R.id.content, fragment)
-            .addToBackStack("ble_pairing")
             .commit()
     }
+
 
 
     // ── 设备管理 ──

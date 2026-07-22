@@ -74,28 +74,41 @@ class DeviceManagerFragment : Fragment() {
     private fun startScanPairing() {
         val act = activity as? FragmentActivity ?: return
         val sdk = BleNotificationSDK.getInstance()
+        val fm = parentFragmentManager
 
-        sdk.startPairing(act, "DeviceManager", object : PairingCallback {
-            override fun onScanSuccess() {}
-            override fun onConnecting() {}
-            override fun onRegistering() {}
-            override fun onPaired() {
-                act.runOnUiThread {
-                    Toast.makeText(act, getString(R.string.s_pair_success), Toast.LENGTH_SHORT).show()
-                }
-            }
-            override fun onError(error: SdkError) {
-                act.runOnUiThread {
-                    val msg = if (error is SdkError.AlreadyPaired) {
-                        getString(R.string.s_device_already_paired)
-                    } else {
-                        getString(R.string.s_pair_failed, error.message)
+        val scannerFragment = com.ble.notification.qr.QrScannerFragment.newInstance { qrResult ->
+            fm.popBackStack()
+
+            if (qrResult == null) return@newInstance
+
+            sdk.startPairingDirectly(act, qrResult, object : PairingCallback {
+                override fun onScanSuccess() {}
+                override fun onConnecting() {}
+                override fun onRegistering() {}
+                override fun onPaired() {
+                    act.runOnUiThread {
+                        Toast.makeText(act, getString(R.string.s_pair_success), Toast.LENGTH_SHORT).show()
                     }
-                    Toast.makeText(act, msg, Toast.LENGTH_SHORT).show()
                 }
-            }
-        })
+                override fun onError(error: SdkError) {
+                    act.runOnUiThread {
+                        val msg = if (error is SdkError.AlreadyPaired) {
+                            getString(R.string.s_device_already_paired)
+                        } else {
+                            getString(R.string.s_pair_failed, error.message)
+                        }
+                        Toast.makeText(act, msg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            })
+        }
+
+        fm.beginTransaction()
+            .replace((view?.parent as? View)?.id ?: android.R.id.content, scannerFragment)
+            .addToBackStack(null)
+            .commit()
     }
+
 
     private fun getHostPrimaryColor(context: Context): Color {
         val theme = context.theme

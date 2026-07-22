@@ -83,10 +83,10 @@ class QrScannerFragment : Fragment() {
         previewView?.let { pv ->
             scanner?.start(pv) { result ->
                 onResult?.invoke(result)
-                parentFragmentManager.beginTransaction().remove(this).commitAllowingStateLoss()
             }
         }
     }
+
 
     override fun onDestroyView() {
         super.onDestroyView()

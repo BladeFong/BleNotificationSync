@@ -35,6 +35,7 @@ function updateUI() {
         : (isChinese ? '未启动' : 'Stopped');
     startBtn.disabled = isRunning;
     stopBtn.disabled = !isRunning;
+    pairBtn.disabled = !isRunning;
 }
 
 // Start server

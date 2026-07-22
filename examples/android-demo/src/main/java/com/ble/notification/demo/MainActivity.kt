@@ -86,6 +86,10 @@ class MainActivity : AppCompatActivity() {
         // 幂等方法：检查所有权限（BLE + 位置），从系统设置返回时会重新申请
         sdk.ensurePermissions(this)
 
+        if (sdk.isPaired()) {
+            sdk.registerSystemScan()
+        }
+
         // 恢复缓存日志
         val cached = LogRepository.getAll(this)
         if (cached.isNotEmpty()) {
@@ -119,12 +123,13 @@ class MainActivity : AppCompatActivity() {
                 log("正在注册…")
             }
             override fun onPaired() {
-                log("绑定成功！")
+                log("绑定成功！已自动注册系统 BLE 后台扫描")
                 runOnUiThread {
-                    Toast.makeText(this@MainActivity, "绑定成功！", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "绑定成功！系统扫描已激活", Toast.LENGTH_SHORT).show()
                     updateButtonStates()
                 }
             }
+
             override fun onError(error: SdkError) {
                 val msg = if (error is SdkError.AlreadyPaired) "该设备已绑定" else "失败: ${error.message}"
                 log(msg)

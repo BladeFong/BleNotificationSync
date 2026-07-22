@@ -370,8 +370,12 @@ async fn run_peripheral_task(
         .start_advertising("BleSyncPC", &[srv_uuid])
         .await
         .map_err(|e| format!("Start advertising failed: {:?}", e))?;
+    
+    // 等待广播状态更新
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    
     let is_adv = peripheral.is_advertising().await.unwrap_or(false);
-    let _ = app_handle.emit("log-message", format!("BLE: 广播已开启，当前实际广播状态：{}", if is_adv { "广播中" } else { "未广播/异常" }));
+    let _ = app_handle.emit("log-message", format!("BLE: 广播已开启，状态：{}", if is_adv { "广播中" } else { "未广播" }));
 
     // 5. 监听事件
     tokio::select! {

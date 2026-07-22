@@ -1,20 +1,20 @@
 # Progress Log
 
-## 2026-07-23 — BLE 连接问题修复 + 项目整理
+## 2026-07-23 — BLE 连接问题修复 + UI 优化
 
 - **问题**：
   - 停止服务后重新启动，Android 端 status=133 连接失败
-  - 需要飞行模式重置蓝牙才能恢复
-- **根因**：
-  - 从 `ble-peripheral-rust` 切换到 Windows 原生 API 时，characteristic 配置只有 `WriteWithoutResponse`
-  - Android 使用 `Write Without Response`，Windows 原生 API 不触发 WriteRequested 事件
+  - 启动服务前扫码绑定按钮可点击
+  - 广播状态检测不准确（总是显示"未广播/异常"）
 - **修复**：
   - 切回 `ble-peripheral-rust` 跨平台库
   - characteristic 同时配置 `Write` + `WriteWithoutResponse`
-  - 启动服务前先重置状态（`is_running = false`）
+  - 启动服务前先重置状态
+  - 服务未启动时禁用扫码绑定按钮
+  - 广播状态检测：启动后等待 500ms 再检测
 - **项目整理**：
   - 移动 `android/demo` → `examples/android-demo`
-  - 删除 `windows/`（旧 C# 实现）、`macos/`（空目录）
+  - 删除 `windows/`、`macos/`
   - 保留 `third_party/`（被 Android JNI 使用）
 
 ## 2026-07-22 — keyring crate 集成（跨平台安全存储）

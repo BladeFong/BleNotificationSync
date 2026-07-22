@@ -20,23 +20,26 @@ object ScanRegistrationManager {
     const val ACTION_SCAN_RESULT = "com.ble.notification.sdk.ACTION_SCAN_RESULT"
 
     fun register(context: Context) {
-        val scanner = android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.bluetoothLeScanner ?: return
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+        val bluetoothAdapter = bluetoothManager?.adapter ?: @Suppress("DEPRECATION") android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+        val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
 
-        // 从已配对设备读取设备名，用作 PendingIntent 扫描过滤
         val pairingManager = com.ble.notification.pairing.PairingManager(context.applicationContext)
-        val deviceName = pairingManager.getPairedDevices()
-            .map { it.name }
-            .firstOrNull { it.isNotEmpty() }
-
-        if (deviceName == null) {
-            android.util.Log.w("BleClient", "No device name saved, skip background scan registration")
+        val pairedDevices = pairingManager.getPairedDevices()
+        if (pairedDevices.isEmpty()) {
+            android.util.Log.w("BleClient", "No paired devices, skip background scan registration")
             return
         }
 
-        android.util.Log.d("BleClient", "Registering PendingIntent scan for device: $deviceName")
-        val filter = ScanFilter.Builder()
-            .setDeviceName(deviceName)
-            .build()
+        val filters = mutableListOf<ScanFilter>()
+        for (device in pairedDevices) {
+            if (device.name.isNotEmpty()) {
+                filters.add(ScanFilter.Builder().setDeviceName(device.name).build())
+            }
+        }
+        filters.add(ScanFilter.Builder().setServiceUuid(ParcelUuid(BleClient.SERVICE_UUID)).build())
+
+        android.util.Log.d("BleClient", "Registering PendingIntent scan with ${filters.size} filters for ${pairedDevices.size} devices")
 
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
@@ -49,21 +52,25 @@ object ScanRegistrationManager {
         val pendingIntent = PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
 
         try {
-            scanner.startScan(listOf(filter), settings, pendingIntent)
+            scanner.startScan(filters, settings, pendingIntent)
             android.util.Log.d("BleClient", "Registered PendingIntent background scan for UUID: ${BleClient.SERVICE_UUID}")
         } catch (e: Exception) {
             android.util.Log.e("BleClient", "Failed to register background scan: ${e.message}")
         }
     }
 
+
     fun unregister(context: Context) {
-        val scanner = android.bluetooth.BluetoothAdapter.getDefaultAdapter()?.bluetoothLeScanner ?: return
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+        val bluetoothAdapter = bluetoothManager?.adapter ?: @Suppress("DEPRECATION") android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+        val scanner = bluetoothAdapter?.bluetoothLeScanner ?: return
         val intent = Intent(context, ScanResultReceiver::class.java).apply { action = ACTION_SCAN_RESULT }
         val flags = PendingIntent.FLAG_NO_CREATE or
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
         val pi = PendingIntent.getBroadcast(context, REQUEST_CODE, intent, flags)
         pi?.let { scanner.stopScan(it); it.cancel() }
     }
+
 
     /** 设备重启后重注册 */
     class BootReceiver : BroadcastReceiver() {

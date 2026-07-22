@@ -313,11 +313,12 @@ fun BottomBarContent(onAddDeviceClick: () -> Unit) {
         ) {
 
             Text(
-                text = "提示：扫描 PC 端客户端显示的 BLE 配对二维码即可完成绑定",
+                text = "扫描 PC 端显示的 BLE 二维码进行绑定",
                 fontSize = 12.sp,
                 color = Color.Gray,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
+
 
             Button(
                 onClick = onAddDeviceClick,

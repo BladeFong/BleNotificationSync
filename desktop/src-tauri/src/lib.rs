@@ -118,6 +118,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(ble::BleState::default())
         .manage(storage::StorageState::default())
+        .manage(notify::NotifyState::default())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             ble::start_gatt_server,

@@ -19,26 +19,18 @@ Windows 端同步路径：`D:\Documents\BleNotificationSync\`
 WSL 编辑代码后，在 Windows PowerShell 中编译和测试：
 
 ```powershell
-# 切换到 Windows 同步目录
-cd D:\Documents\BleNotificationSync\desktop
+# 编译直接运行版
+powershell.exe -Command "Stop-Process -Name 'ble-notification-sync' -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; cd D:\Documents\BleNotificationSync\desktop; cargo build --release --manifest-path src-tauri\Cargo.toml" 2>&1 | tail -3
 
-# 安装 npm 依赖
-npm install
-
-# 开发模式（热重载）
-npm run tauri dev
-
-# 生产构建
-npm run tauri build
-
-# 仅运行 Rust 单元测试
-cargo test --manifest-path src-tauri/Cargo.toml
-
-# 检查 Rust 代码编译
-cargo check --manifest-path src-tauri/Cargo.toml
+# 编译安装版
+powershell.exe -Command "Stop-Process -Name 'ble-notification-sync' -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; cd D:\Documents\BleNotificationSync\desktop; npm run tauri build" 2>&1 | tail -10
 ```
 
 **注意**：
+- **编译前代码同步**：在 Windows 端编译验证前，必须先将代码同步至 `D:\Documents\BleNotificationSync\desktop`
+- **构建并发控制**：一次只能跑一个编译命令，**禁止**并发下发多个编译/构建任务（避免抢占 target/ 锁死）
+- **PowerShell 命令执行**：所有 PowerShell 命令行必须及时捕获并输出返回结果，严禁无声在后台长时间悬挂
+- **Rust 官方文档检索**：`https://docs.rs/` 是 Rust 官方 Crate 文档中心，排查或使用 Rust 开源库时优先从 docs.rs 获取最新官方 API 规范与结构体定义
 - Tauri 编译和运行必须在 Windows 上进行（BLE 硬件访问、Windows 注册表等平台特性）
 - WSL 仅用于代码编辑和 Git 操作
 - 前端是 Vanilla JS，无构建工具，Tauri 直接加载 `src/` 目录。没有 `vite`、`webpack` 等前端构建流程

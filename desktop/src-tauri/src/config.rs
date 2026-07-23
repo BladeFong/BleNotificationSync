@@ -19,6 +19,34 @@ fn config_dir() -> Result<PathBuf, String> {
     }
 }
 
+pub fn icons_dir() -> Result<PathBuf, String> {
+    let dir = config_dir()?.join("icons");
+    if !dir.exists() {
+        fs::create_dir_all(&dir).map_err(|e| format!("无法创建图标目录: {}", e))?;
+    }
+    Ok(dir)
+}
+
+pub fn save_app_icon(package_name: &str, data: &[u8]) -> Result<PathBuf, String> {
+    let dir = icons_dir()?;
+    // sanitize package_name for file path safety
+    let safe_pkg = package_name.replace(|c: char| !c.is_alphanumeric() && c != '.' && c != '_', "_");
+    let file_path = dir.join(format!("{}.png", safe_pkg));
+    fs::write(&file_path, data).map_err(|e| format!("保存图标失败: {}", e))?;
+    Ok(file_path)
+}
+
+pub fn get_app_icon_path(package_name: &str) -> Option<PathBuf> {
+    let dir = icons_dir().ok()?;
+    let safe_pkg = package_name.replace(|c: char| !c.is_alphanumeric() && c != '.' && c != '_', "_");
+    let file_path = dir.join(format!("{}.png", safe_pkg));
+    if file_path.exists() {
+        Some(file_path)
+    } else {
+        None
+    }
+}
+
 fn config_path() -> Result<PathBuf, String> {
     Ok(config_dir()?.join("config.json"))
 }

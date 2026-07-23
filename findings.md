@@ -33,6 +33,10 @@
 | 扫码三层设计 | 解码层/相机层/UI 层，APP 灵活选择 |
 | Android minSdk API 23 | 覆盖 99.2% 设备，避开 Camera2 早期 bug |
 | 图标二进制直传 | 不 Base64，省 33% 带宽 |
+| winrt-notification Toast builder 模式 | `title()`/`text1()`/`icon()` 均 consume self 返回新 Toast，需链式调用或重新赋值 |
+| WinRT Toast 操作中心清理 | 默认会留在操作中心 3 天。通过 `ToastNotificationManager::History.Clear(app_id)` 清理，epoch 防抖机制 3 分钟顺延 |
+| macOS 通知图标限制 | `notify-rust` 的 `icon()` 走 `NSUserNotification._identityImage` 私有 API 或 `UNUserNotificationCenter` 的 App Bundle 图标，无法设置单条通知的自定义内容图。需 `UNNotificationAttachment` 另做 |
+| 通知标题来源 | SDK 不包含 `NotificationListenerService`，标题由调用方提供。Demo 在 `strings.xml` 写死 `s_notify_title` |
 | 图标最大 60KB | 确保 255 帧内完成传输 |
 
 ## Skills Found
@@ -57,6 +61,7 @@
 | 消息帧字段对齐 | 将桌面端解码的 NotifyData 结构体 field 从 `content` 改为 `body`，完全对齐 Android 端 SDK 构造 of `body` 字段，解决了通知反序列化失败的 Bug。 |
 | Windows 凭据命令规范与C#互操作读取 | 修复 `cmdkey` 使用冒号连接参数及使用 `/generic` 创建通用凭据以确保密钥保存成功。并在 PowerShell 中采用 C# 互操作调用原生 `CredReadW` 接口读取密码，避开了对非系统内置的 `Get-StoredCredential` cmdlet 的依赖。 |
 | Tauri 官方通知插件与权限校验 | 使用 Tauri v2 官方提供的 `tauri-plugin-notification` 跨平台插件，并在 Rust 异步任务中执行权限检测与动态获取，同时将插件报错引流至前端 UI 终端，以完美兼容多平台通知生命周期。 |
+| 用户 AppData 图标隔离与优先加载 | 将绑定阶段手机传来的 App 图标统一规范保存于 `%APPDATA%\ble-notification-sync\icons\<package_name>.png`，避开 Program Files 写权限问题；在原生 Toast 通知发送时优先读取该路径显示 App 大图标。 |
 
 ## Resources
 - 设计文档: `docs/superpowers/specs/2026-07-10-ble-notification-sync-design.md`
@@ -75,3 +80,4 @@
 | 桌面端接收到通知数据但未显示系统通知 | 原因在于双端 JSON 字段名称对齐冲突：Android 发送 `"body"` 键，而桌面 Rust 预期解密出 `"content"` 键。通过修改桌面端的 `NotifyData` 为 `body: String` 解决。 |
 | Windows 凭据管理器保存与读取默默失败 | 1. 之前使用 `cmdkey /add` 参数不规范，导致系统返回 exit code 1 写入失败。更正为冒号与 `/generic` 参数。 2. 原 `Get-StoredCredential` cmdlet 在原生 Win10/11 系统中默认未安装，执行抛出 CommandNotFoundException。重构为通过 PowerShell 的 Add-Type 编译 C# 代码，调用 Windows 原生 `CredReadW` API 进行读取。 |
 | Win10/11 开发环境下现代 Toast 通知被系统拦截 | Windows 10/11 对 WinRT/UWP 现代通知有硬性安全限制：应用必须在开始菜单（Start Menu）中拥有快捷方式并注册了匹配的 `AppUserModelId` (例如 `com.ble-notification-sync.desktop`)，否则通知会被系统静默丢弃。该问题在通过 MSI / NSIS 安装包安装该应用后会由安装器自动注册并完美显示；在开发调试阶段（`tauri dev`），开发者可通过手动为编译出的 EXE 在 `AppData\Roaming\Microsoft\Windows\Start Menu\Programs` 创建快捷方式并分配 ID 来临时绕过。 |
+| 系统通知无法正确展示 App 大图标 | 检查发现 Android SDK 绑定时未实际发送 `ICON_DATA` 与 `ICON_END` 帧，且桌面端原生 Toast 未读取对应的图标路径。通过在 Android 端添加 App 图标压缩分片传输、桌面端接收入 AppData 目录并在 Toast 弹窗时指定对应绝对路径解决。 |

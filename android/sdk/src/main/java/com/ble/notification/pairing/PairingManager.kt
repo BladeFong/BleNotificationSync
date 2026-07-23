@@ -133,6 +133,12 @@ class PairingManager(private val context: Context) {
                     val writeOk = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, registerFrame)
                     android.util.Log.d("BleClient", "writeCharacteristic returned: $writeOk")
 
+                    // 异步发送 APP 图标（延迟 300ms，避开 REGISTER 帧底层的 GATT Write Pending 状态）
+                    Thread {
+                        try { Thread.sleep(300) } catch (_: InterruptedException) {}
+                        sendAppIcon(gatt, characteristic, packageName)
+                    }.start()
+
                     val baseKey = deriveBaseKey(packageName, random)
                     val actualMac = gatt.device.address
                     val deviceName = qrResult.name ?: gatt.device.name ?: "PC Device"
@@ -283,6 +289,81 @@ class PairingManager(private val context: Context) {
             if (name.isNullOrBlank()) android.os.Build.MODEL else name
         } catch (e: Exception) {
             android.os.Build.MODEL ?: "Android Device"
+        }
+    }
+
+    private fun sendAppIcon(
+        gatt: android.bluetooth.BluetoothGatt,
+        characteristic: android.bluetooth.BluetoothGattCharacteristic,
+        packageName: String
+    ) {
+        android.util.Log.d("Pairing", "sendAppIcon: start for package=$packageName")
+        val iconBytes = extractAppIcon(packageName)
+        if (iconBytes == null || iconBytes.isEmpty()) {
+            android.util.Log.w("Pairing", "sendAppIcon: iconBytes is null or empty, aborting icon send")
+            return
+        }
+
+        val chunkSize = 200
+        val totalSeq = (iconBytes.size + chunkSize - 1) / chunkSize
+        android.util.Log.d("Pairing", "sendAppIcon: iconBytes size=${iconBytes.size}, totalSeq=$totalSeq")
+
+        try { Thread.sleep(100) } catch (_: InterruptedException) {}
+
+        // 使用标准的 WRITE_TYPE_DEFAULT 配合 sleep 间隔，避开 WinRT 对 WRITE_TYPE_NO_RESPONSE 的 COM Crash
+        val writeType = android.bluetooth.BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+
+        for (seq in 0 until totalSeq) {
+            val start = seq * chunkSize
+            val end = minOf(start + chunkSize, iconBytes.size)
+            val chunk = iconBytes.copyOfRange(start, end)
+            val iconFrame = FrameEncoder.encodeIconData(chunk, seq, totalSeq)
+
+            var sent = false
+            for (retry in 0 until 5) {
+                val ok = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, iconFrame, writeType)
+                if (ok) {
+                    sent = true
+                    break
+                }
+                try { Thread.sleep(30) } catch (_: InterruptedException) {}
+            }
+            android.util.Log.d("Pairing", "Sent ICON_DATA frame $seq/$totalSeq, success=$sent")
+            try { Thread.sleep(50) } catch (_: InterruptedException) {}
+        }
+
+        val iconEndFrame = FrameEncoder.encodeIconEnd(iconBytes.size)
+        var endSent = false
+        for (retry in 0 until 5) {
+            val ok = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, iconEndFrame, writeType)
+            if (ok) { endSent = true; break }
+            try { Thread.sleep(30) } catch (_: InterruptedException) {}
+        }
+        android.util.Log.d("Pairing", "App icon ICON_END sent, success=$endSent")
+    }
+
+    private fun extractAppIcon(packageName: String): ByteArray? {
+        return try {
+            val pm = context.packageManager
+            val appInfo = pm.getApplicationInfo(packageName, 0)
+            val drawable = pm.getApplicationIcon(appInfo)
+            val w = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 108
+            val h = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 108
+
+            val bitmap = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            drawable.setBounds(0, 0, canvas.width, canvas.height)
+            drawable.draw(canvas)
+
+            val scaledBmp = android.graphics.Bitmap.createScaledBitmap(bitmap, 64, 64, true)
+            val stream = java.io.ByteArrayOutputStream()
+            scaledBmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 80, stream)
+            val bytes = stream.toByteArray()
+            android.util.Log.d("Pairing", "extractAppIcon: SUCCESS, bytes=${bytes.size}")
+            bytes
+        } catch (e: Throwable) {
+            android.util.Log.e("Pairing", "extractAppIcon: FAILED for package=$packageName", e)
+            null
         }
     }
 }

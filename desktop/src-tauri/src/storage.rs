@@ -29,6 +29,7 @@ impl From<config::DeviceEntry> for PairedDevice {
 pub struct StorageState {
     pub devices: Mutex<HashMap<String, PairedDevice>>,
     pub silent_mode: Mutex<bool>,
+    pub last_registered_package: Mutex<Option<String>>,
 }
 
 impl Default for StorageState {
@@ -42,12 +43,13 @@ impl Default for StorageState {
         Self {
             devices: Mutex::new(devices),
             silent_mode: Mutex::new(cfg.silent_mode),
+            last_registered_package: Mutex::new(None),
         }
     }
 }
 
 /// 将当前内存状态写回 JSON 配置
-fn sync_devices_to_config(state: &StorageState) {
+pub fn sync_devices_to_config(state: &StorageState) {
     let devices = state.devices.lock().unwrap();
     let silent = state.silent_mode.lock().unwrap();
     let cfg = config::AppConfig {

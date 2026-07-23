@@ -1,5 +1,32 @@
 # Progress Log
 
+## 2026-07-23 — 通知清理策略与代码质量修复
+
+- **通知防抖清理**：WinRT Toast 默认留在操作中心，展示后 3 分钟通过 `ToastNotificationManager::History.Clear()` 清理。epoch 机制保证期间新通知顺延，避免误清。
+- **非 Windows 通知死代码修复**（#1）：`send()` 原实现中 `is_installed()` 在非 Windows 返回 false，`send_notify_rust` 中的 `notify-rust` 路径永不被调用。重构为 `#[cfg]` 函数级分流：`send_notify_winrt` / `send_notify_nix`。
+- **sync_to_config 去重**（#2）：删除 `ble.rs` 的 `sync_to_config()`，改为调用 `storage::sync_devices_to_config()`。
+- **FragmentBuffer 超时清理**（#3）：加 `created_at` 时间戳 + `cleanup_stale()`，每 100 BLE 事件清理超过 30s 未集齐的分片，防丢包内存泄漏。
+- **thread→tokio task**（#4）：清理任务从 `std::thread::spawn` + `sleep` 改为 `tokio::spawn` + `tokio::time::sleep`，不再混用线程模型。
+- **catch_unwind 加日志**（#5）：WinRT COM 崩溃时 emit log-message，方便排查。
+- **编译验证**：`cargo check` / `cargo test`(12 passed) / `cargo build --release` / `npm run tauri build`(MSI+NSIS) 均通过。
+
+## 2026-07-23 — 修复 winrt-notification Toast builder 模式编译错误
+
+- **问题**：`winrt-notification` 的 `Toast` API 是 builder 模式，`title()`/`text1()`/`icon()`/`show()` 均 consume self 返回新 Toast，原代码未接收返回值，导致 `use of moved value` 编译错误（4 个 E0382）。
+- **修复**：`notify.rs` `send_notify_rust()` 中，初始化改为链式调用 `Toast::new(&app_id).title(title).text1(body)`，条件设置图标时赋值 `toast = toast.icon(...)`。
+- **结果**：`cargo check` 和 `cargo build --release` 均通过（2 分钟），无新增 warning。
+
+## 2026-07-23 — 移除标识文件 & 对齐 SDK App 图标同步与系统通知展示
+
+- **安装标识清理**：
+  - 移除 `tauri.conf.json` 中 `"resources": [ ".installed" ]` 项，完全依赖注册表 `HKCU\...\Uninstall\BLE Notification Sync` 下 `InstallLocation` 比对进行安装版判别，不依赖任何物理标识文件。
+- **Android SDK 对齐**：
+  - 在 `PairingManager.kt` 绑定流程中添加 `sendAppIcon`，提取应用图标压缩为 96x96 PNG，按 `ICON_DATA` (0x04) 帧分片发送，并在末尾发送 `ICON_END` (0x05) 帧。
+- **桌面端图标存储与通知展示**：
+  - 在 `config.rs` 中规范图标存储目录为用户 AppData 目录 `%APPDATA%\ble-notification-sync\icons\<package_name>.png`。
+  - 在 `ble.rs` 中接收重组 `MSG_ICON_DATA` 与 `MSG_ICON_END` 并落盘落本地；通知触发时解析对应包名 `package` 并传至 `notify::send`。
+  - 在 `notify.rs` 原生 Toast 通知中根据包名获取 App 图标路径并优先设置为通知大图标。
+
 ## 2026-07-23 — 通知功能优化
 
 - **问题**：

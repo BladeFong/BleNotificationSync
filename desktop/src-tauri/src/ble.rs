@@ -56,8 +56,13 @@ fn stop_internal(state: &BleState) -> Result<(), String> {
 
 // ── 分片重组 ──
 
+struct FragmentEntry {
+    slots: Vec<Option<Vec<u8>>>,
+    created_at: std::time::Instant,
+}
+
 pub struct FragmentBuffer {
-    buffers: HashMap<(u8, u8), Vec<Option<Vec<u8>>>>,
+    buffers: HashMap<(u8, u8), FragmentEntry>,
 }
 
 impl FragmentBuffer {
@@ -66,16 +71,29 @@ impl FragmentBuffer {
     pub fn insert(&mut self, msg_type: u8, total_seq: u8, seq: u8, payload: Vec<u8>) -> Option<Vec<u8>> {
         if total_seq <= 1 { return Some(payload); }
         let key = (msg_type, total_seq);
-        let slots = self.buffers.entry(key).or_insert_with(|| vec![None; total_seq as usize]);
-        if (seq as usize) < slots.len() {
-            slots[seq as usize] = Some(payload);
+        let entry = self.buffers.entry(key).or_insert_with(|| FragmentEntry {
+            slots: vec![None; total_seq as usize],
+            created_at: std::time::Instant::now(),
+        });
+        if (seq as usize) < entry.slots.len() {
+            entry.slots[seq as usize] = Some(payload);
         }
-        if slots.iter().all(|s| s.is_some()) {
+        if !entry.slots.is_empty() && entry.slots.iter().all(|s| s.is_some()) {
             let mut full = Vec::new();
-            for s in slots.iter() { full.extend_from_slice(s.as_ref().unwrap()); }
+            for s in entry.slots.iter() {
+                if let Some(data) = s {
+                    full.extend_from_slice(data);
+                }
+            }
             self.buffers.remove(&key);
             Some(full)
         } else { None }
+    }
+
+    /// 清理超过 max_age 未集齐的分片（防止丢包内存泄漏）
+    pub fn cleanup_stale(&mut self, max_age: std::time::Duration) {
+        let now = std::time::Instant::now();
+        self.buffers.retain(|_, entry| now.duration_since(entry.created_at) < max_age);
     }
 }
 
@@ -86,6 +104,8 @@ pub async fn handle_full_message(app_handle: &AppHandle, msg_type: u8, payload: 
     match msg_type {
         protocol::MSG_REGISTER => handle_register(app_handle, payload).await,
         protocol::MSG_NOTIFY => handle_notify(app_handle, payload).await,
+        protocol::MSG_ICON_DATA => handle_icon_data(app_handle, payload).await,
+        protocol::MSG_ICON_END => handle_icon_end(app_handle, payload).await,
         _ => {}
     }
 }
@@ -117,6 +137,10 @@ async fn handle_register(app_handle: &AppHandle, payload: &[u8]) {
 
     let storage_state = app_handle.state::<storage::StorageState>();
     {
+        let mut last_pkg = storage_state.last_registered_package.lock().unwrap();
+        *last_pkg = Some(data.package.clone());
+    }
+    {
         let mut devices = storage_state.devices.lock().unwrap();
         // 如果设备已存在，更新设备名（支持动态更新）
         if let Some(existing) = devices.get_mut(&device_id) {
@@ -133,7 +157,7 @@ async fn handle_register(app_handle: &AppHandle, payload: &[u8]) {
             });
         }
     }
-    sync_to_config(&storage_state);
+    storage::sync_devices_to_config(&storage_state);
     match config::store_base_key(&device_id, &data.package, &base_key) {
         Ok(()) => { let _ = app_handle.emit("log-message", format!("密钥存储成功: device_id={}", device_id)); }
         Err(e) => { let _ = app_handle.emit("log-message", format!("密钥存储失败: {}", e)); }
@@ -145,6 +169,36 @@ async fn handle_register(app_handle: &AppHandle, payload: &[u8]) {
         "device_id": device_id, "device_name": device_name,
         "app_name": data.app_name, "package": data.package,
     }).to_string());
+}
+
+async fn handle_icon_data(app_handle: &AppHandle, payload: &[u8]) {
+    let _ = app_handle.emit("log-message", format!("BLE 收到图标数据帧 (0x04)，Payload 长度: {}", payload.len()));
+    let storage_state = app_handle.state::<storage::StorageState>();
+    let package = {
+        let guard = storage_state.last_registered_package.lock().unwrap();
+        guard.clone()
+    };
+    if let Some(pkg) = package {
+        let app_handle_clone = app_handle.clone();
+        let payload_vec = payload.to_vec();
+        tokio::task::spawn_blocking(move || {
+            match config::save_app_icon(&pkg, &payload_vec) {
+                Ok(path) => {
+                    let path_str = path.to_string_lossy().to_string();
+                    let _ = app_handle_clone.emit("log-message", format!("App 图标保存成功: {} -> {}", pkg, path_str));
+                }
+                Err(e) => {
+                    let _ = app_handle_clone.emit("log-message", format!("App 图标保存失败: {}", e));
+                }
+            }
+        });
+    } else {
+        let _ = app_handle.emit("log-message", "收到 App 图标数据，但未找到匹配包名".to_string());
+    }
+}
+
+async fn handle_icon_end(app_handle: &AppHandle, _payload: &[u8]) {
+    let _ = app_handle.emit("log-message", "BLE 收到图标传输完成帧 (0x05)".to_string());
 }
 
 async fn handle_notify(app_handle: &AppHandle, payload: &[u8]) {
@@ -204,7 +258,7 @@ async fn handle_notify(app_handle: &AppHandle, payload: &[u8]) {
             match serde_json::from_str::<NotifyData>(&json_str) {
                 Ok(data) => {
                     let _ = app_handle.emit("log-message", format!("通知: {} - {}", data.title, data.body));
-                    crate::notify::send(app_handle, &data.title, &data.body);
+                    crate::notify::send(app_handle, &data.title, &data.body, Some(&package));
                 }
                 Err(e) => {
                     let _ = app_handle.emit("log-message", format!("解析通知 JSON 失败: {}, Raw: {}", e, json_str));
@@ -217,20 +271,6 @@ async fn handle_notify(app_handle: &AppHandle, payload: &[u8]) {
     }
 }
 
-fn sync_to_config(state: &storage::StorageState) {
-    let devices = state.devices.lock().unwrap();
-    let silent = state.silent_mode.lock().unwrap();
-    let _ = config::save_config(&config::AppConfig {
-        silent_mode: *silent,
-        devices: devices.values().map(|d| config::DeviceEntry {
-            device_id: d.device_id.clone(),
-            device_name: d.device_name.clone(),
-            app_name: d.app_name.clone(),
-            package_name: d.package_name.clone(),
-            paired_at: d.paired_at.clone(),
-        }).collect(),
-    });
-}
 
 // ── MAC 获取 ──
 
@@ -397,6 +437,7 @@ async fn handle_ble_events(
     mut event_rx: tokio::sync::mpsc::Receiver<PeripheralEvent>,
 ) {
     let mut fragments = FragmentBuffer::new();
+    let mut event_count: u64 = 0;
 
     while let Some(event) = event_rx.recv().await {
         match event {
@@ -406,10 +447,15 @@ async fn handle_ble_events(
                 value,
                 responder,
             } => {
-                // 1. 回复客户端
-                let _ = responder.send(WriteRequestResponse {
-                    response: RequestResponse::Success,
-                });
+                // 1. 回复客户端（防范 WinRT COM 异常）
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let _ = responder.send(WriteRequestResponse {
+                        response: RequestResponse::Success,
+                    });
+                }));
+                if result.is_err() {
+                    let _ = app_handle.emit("log-message", "[BLE] WinRT responder.send 崩溃（已恢复，不影响服务）");
+                }
 
                 // 2. 数据送入分片处理器
                 if !value.is_empty() {
@@ -443,6 +489,12 @@ async fn handle_ble_events(
                 });
             }
             _ => {}
+        }
+
+        // 每 100 个事件清理一次超过 30 秒未集齐的分片
+        event_count += 1;
+        if event_count % 100 == 0 {
+            fragments.cleanup_stale(std::time::Duration::from_secs(30));
         }
     }
 }

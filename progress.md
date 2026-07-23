@@ -1,5 +1,12 @@
 # Progress Log
 
+## 2026-07-23 — 全平台编译验证通过
+
+- Android SDK + Demo：BUILD SUCCESSFUL
+- Windows release：通过（`ble-notification-sync.exe`）
+- Windows 安装版：MSI + NSIS 双包
+- Linux 预编译：通过（WSL），修复 `notify-rust` 非 Windows 编译错误（`show()` 返回 `NotificationHandle` → 需 `map(|_| ())`）
+
 ## 2026-07-23 — 文档对齐：设计规范/计划/任务计划全面对齐当前实现
 
 - **背景**：排查设计文档发现 22 处与代码实现不一致，包括架构方案变更、UUID 不同、API 签名过时等。

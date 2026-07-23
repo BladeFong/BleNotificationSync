@@ -148,6 +148,7 @@ fn send_notify_nix(title: &str, body: &str, package: Option<&str>) -> Result<(),
 
     notification
         .show()
+        .map(|_| ())
         .map_err(|e| format!("notify-rust 发送失败: {:?}", e))
 }
 

@@ -1,6 +1,6 @@
 # BLE Notification Sync Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **状态更新（2026-07-23）**：Tasks 1-10（Android SDK）已完成，集成 54 个单元测试。Tasks 11-16（Windows C# / macOS Swift）已废弃——桌面端已统一为 Tauri v2 Rust 方案（`desktop/src-tauri/`），旧 `windows/` 和 `macos/` 目录保留仅作参考。以下为原始计划，Architecture/Files 部分描述的是废弃的 C#/Swift 架构。
 
 **Goal:** 实现跨平台 BLE 闹钟通知同步，包含 Android SDK 和 Tauri 桌面端（Windows + macOS），支持 HKDF + AES-GCM 加密。
 
@@ -2206,22 +2206,24 @@ git commit -m "feat(macos): add menu bar app and notification service"
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1 | 下载 LibTomCrypt 源码 | - |
-| 2 | Android JNI 桥接 | - |
-| 3 | Android 密钥派生 | - |
-| 4 | Android 加密服务 | - |
-| 5 | Android 帧编码器 | - |
-| 6 | Android 帧解码器 | - |
-| 7 | Android BLE 客户端 | - |
-| 8 | Android 扫码分层实现 | - |
-| 9 | Android 配对管理器 | - |
-| 10 | Android SDK 主入口 | - |
-| 11 | Windows LibTomCrypt 桥接 | - |
-| 12 | Windows GATT Server | - |
-| 13 | macOS LibTomCrypt 桥接 | - |
-| 14 | macOS Peripheral Manager | - |
-| 15 | macOS 配对存储 | - |
-| 16 | macOS 菜单栏应用 | - |
+| 1 | 下载 LibTomCrypt 源码 | ✅ |
+| 2 | Android JNI 桥接（已改为 AES-GCM） | ✅ |
+| 3 | Android 密钥派生 | ✅ |
+| 4 | Android 加密服务（AesGcmCrypto） | ✅ |
+| 5 | Android 帧编码器 | ✅ |
+| 6 | Android 帧解码器 | ✅ |
+| 7 | Android BLE 客户端（已改为 scan-and-connect） | ✅ |
+| 8 | Android 扫码分层实现 | ✅ |
+| 9 | Android 配对管理器（UUID 主键） | ✅ |
+| 10 | Android SDK 主入口 + 闹钟/前台 Service | ✅ |
+| 11 | ~~Windows C# LibTomCrypt 桥接~~ | ❌ 已废弃 |
+| 12 | ~~Windows C# GATT Server~~ | ❌ 已废弃 |
+| 13 | ~~macOS Swift LibTomCrypt 桥接~~ | ❌ 已废弃 |
+| 14 | ~~macOS Swift Peripheral Manager~~ | ❌ 已废弃 |
+| 15 | ~~macOS Swift 配对存储~~ | ❌ 已废弃 |
+| 16 | ~~macOS Swift 菜单栏应用~~ | ❌ 已废弃 |
+
+> 废弃的 Tasks 11-16 已由 Tauri v2 + Rust `ble-peripheral-rust` / `aes-gcm` / `keyring` / `winrt-notification` / `notify-rust` 跨平台方案替代。详见 `specs/2026-07-10-ble-notification-sync-design.md` §7 和 `specs/2026-07-16-cross-platform-ble-peripheral-design.md`。
 
 **Plan complete and saved to `docs/superpowers/plans/2026-07-10-ble-notification-sync.md`.**
 

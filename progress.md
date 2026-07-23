@@ -1,5 +1,14 @@
 # Progress Log
 
+## 2026-07-23 — 文档对齐：设计规范/计划/任务计划全面对齐当前实现
+
+- **背景**：排查设计文档发现 22 处与代码实现不一致，包括架构方案变更、UUID 不同、API 签名过时等。
+- **主设计规范**（`specs/...-design.md`）：UUID 更新、REGISTER 载荷加 `android_id`/`device_name`、去 ACK 时序、QR 格式 `mac`→可选 `name` 新增、配对回调 `onQrResult` 新增、连接策略补 `BleForegroundService` 扫描机制、§7 完全重写（C#/Swift→Tauri v2）、项目结构更新、实现阶段状态刷新。
+- **SDK API 改进设计**（`specs/...-sdk-api-improvements-design.md`）：配对持久化对齐实际（UUID 主键、EncryptedSharedPreferences、PairedDevice 字段）、SdkError 补 `AlreadyPaired`、连接复用改为"不做"并附理由。
+- **BLE 外设设计**（`specs/...-ble-peripheral-design.md`）：UUID 修正、属性 Write+WriteWithoutResponse、加演进记录。
+- **实现计划**（`plans/`）：标注 Tasks 11-16（Windows C#/macOS Swift）已废弃、Tasks 1-10 完成、SDK 改进全部完成。
+- **task_plan.md**：Phase 3.5 标记 5/5 完成（连接复用确认不做）。
+
 ## 2026-07-23 — SDK 通知标题默认获取 App 名
 
 - **问题**：Demo 在 `strings.xml` 写死 `s_notify_title`，集成 App 可能照抄导致通知标题无辨识度。

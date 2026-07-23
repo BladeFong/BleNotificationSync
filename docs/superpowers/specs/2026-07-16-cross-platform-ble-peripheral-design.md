@@ -49,15 +49,18 @@ pub struct BleState {
 ### 3.3 BLE 外设启动与停止时序
 1. **初始化外设**：调用 `Peripheral::new(event_tx)` 获得外设句柄。
 2. **定义服务与特征值**：
-   - 注册主服务 UUID 为 `0000A1B2-0000-1000-8000-00805F9B34FB`。
-   - 注册写入特征值 UUID 为 `0000C3D4-0000-1000-8000-00805F9B34FB`，其属性属性为 `WriteWithoutResponse`。
+   - 注册主服务 UUID 为 `9e1d51a4-9c86-4447-9759-f6222b0f4b36`。
+   - 注册写入特征值 UUID 为 `f4788cde-8025-4c07-b352-87db1b272fdf`，属性为 `Write` + `WriteWithoutResponse`。
 3. **注册与广告**：通过 `peripheral.add_service(&service)` 注册服务，并调用 `peripheral.start_advertising("BleSyncPC", &[service_uuid])` 开启广播。
 4. **事件消费**：异步轮询 `PeripheralEvent`：
-   - 收到 `WriteRequest` 后：先向底层回复成功，然后提取 `value` 字节，交给分片重组器 `FragmentBuffer`，重组成功后调用 `handle_full_message`。
+   - 收到 `WriteRequest` 后：先 `catch_unwind` 回复成功（防范 WinRT COM 异常），提取 value 字节 → `protocol::parse_frame` → `FragmentBuffer::insert`（带 30s 超时清理），重组成功 → `handle_full_message` 分发到 REGISTER/NOTIFY/ICON_DATA/ICON_END 处理器。
    - 收到 `ReadRequest` 后：直接回复成功。
 5. **服务关闭**：当调用 `stop_service` 时，触发 `shutdown_tx` 发送信号，退出事件循环，丢弃 `Peripheral` 实例以释放蓝牙广播。
 
-## 4. 规范自审
-1. **占位符扫描**：文档内无 TODO 等占位标识。
-2. **一致性检查**：服务 UUID 及特征值 UUID 均与项目主规格协议一致。
-3. **范围限制**：重构聚焦在删除 WinRT 冗余排查代码、引入跨平台 API 并支持完整的生命周期控制。
+## 4. 演进记录（与原设计的差异）
+- 服务 UUID 和特征值 UUID 使用自定义值（非标准 128-bit UUID），与原始方案不同
+- 特征值同时支持 `Write` 和 `WriteWithoutResponse`（非仅 WRITE_NO_RESPONSE）
+- `FragmentBuffer` 增加 `created_at` 时间戳 + `cleanup_stale()` 防丢包内存泄漏
+- `WriteRequest` 响应增加 `catch_unwind` 防 WinRT COM 异常崩溃
+- 消息处理器扩展支持 ICON_DATA/ICON_END（图标同步）
+- 桌面端新增 `config.rs`（图标存储/keyring 密钥管理）、`notify.rs`（NotifyState 通知清理防抖）、`event_handler.rs`（托盘菜单事件）模块

@@ -12,29 +12,37 @@ SDK 初版实现了基础功能链路（加密/协议/BLE/扫码/闹钟），但
 
 `PairingManager.savePairing()` 只写内存 `mutableMapOf`，App 重启后 `isPaired()` 全部返回 false。
 
-### 方案
+### 方案（已实现）
 
-SharedPreferences，key=`pairing_$packageName`，value=`"$mac|$appName"`。
+`EncryptedSharedPreferences`（`androidx.security:security-crypto`），key=`pairing_uuid_$uuid`，value=`"$uuid|$deviceName|$appName|$baseKey|$pairedAt"`。
 
 ```
 PairingManager(Context)
-  ├── savePairing(packageName, mac, appName)   → prefs.putString("pairing_$pkg", "$mac|$appName")
-  ├── isPaired(packageName): Boolean           → prefs.contains(key)
-  ├── getPairedMac(packageName): String?       → value.split("|")[0]
-  ├── getPairedAppName(packageName): String?   → value.split("|")[1]
-  ├── getPairedDevices(): List<PairedDevice>   → prefs.all.filterKeys { it startsWith "pairing_" }
-  └── unpair(packageName)                       → prefs.remove(key)
+  ├── savePairing(uuid, deviceName, appName, packageName, baseKey)
+  │       → encryptedPrefs.putString("pairing_uuid_$uuid", "$uuid|$deviceName|$appName|$baseKey|$pairedAt")
+  ├── isPaired(uuid?): Boolean                → uuids.contains(key) 或 prefs.contains("pairing_uuid_$uuid")
+  ├── getBaseKey(uuid): ByteArray?            → 从存储值中提取 baseKey
+  ├── getPairedDevices(): List<PairedDevice>  → prefs.all.filterKeys { it startsWith "pairing_uuid_" }
+  ├── unpair(uuid)                             → prefs.remove("pairing_uuid_$uuid")
+  └── unpairAll()                              → 删除所有 pairing_uuid_* 键
 ```
 
-新增数据类：
+数据类：
 
 ```kotlin
 data class PairedDevice(
-    val packageName: String,
-    val mac: String,
-    val appName: String
+    val uuid: String,           // Android ID（主键）
+    val name: String,           // 设备友好名称
+    val appName: String,        // App 显示名
+    val pairedAt: String        // 绑定时间（ISO 8601）
 )
 ```
+
+**与初版设计的关键差异**：
+- 主键从 MAC 改为 Android ID（`Settings.Secure.ANDROID_ID`）——MAC 不再可靠
+- 存储从普通 SharedPreferences 升级为 EncryptedSharedPreferences
+- 新增 `unpairAll()`、`getBaseKey()` 方法
+- 移除 `getPairedMac()`——概念已废弃
 
 ### 注意
 
@@ -48,12 +56,13 @@ data class PairedDevice(
 每次消息: nonce(12B 随机) + ciphertext = AES-256-GCM(baseKey, nonce, plaintext)
 ```
 
-`PairingManager` 持久化（SharedPreferences）：
+`PairingManager` 持久化（EncryptedSharedPreferences）：
 
 ```
-key:   "pairing_$packageName"
-value: "$mac|$appName|$baseKey"     // baseKey: 32B HKDF 派生结果
-                                    // random: 不存（配后丢弃）
+key:   "pairing_uuid_$uuid"
+value: "$uuid|$deviceName|$appName|$baseKey|$pairedAt"
+// baseKey: 32B HKDF 派生结果的 hex 编码
+// random: 不存（配后丢弃）
 ```
 
 此设计确保：
@@ -81,7 +90,7 @@ value: "$mac|$appName|$baseKey"     // baseKey: 32B HKDF 派生结果
 | API 级别 | 所需权限 |
 |----------|---------|
 | 23-30 | `BLUETOOTH` + `BLUETOOTH_ADMIN` + `ACCESS_FINE_LOCATION` |
-| 31+ | `BLUETOOTH_SCAN` + `BLUETOOTH_CONNECT` |
+| 31+ | `BLUETOOTH_SCAN` + `BLUETOOTH_CONNECT` + `ACCESS_FINE_LOCATION`（扫码/扫描需要位置权限） |
 
 ### 实现
 
@@ -118,17 +127,14 @@ object BleClient {
 
 ---
 
-## 3. 连接复用（本期不做）
+## 3. 连接复用（不做）
 
-### 方案说明（留待后续）
+### 不做理由
 
-配对成功后保持 GATT 连接 30s，后续 `sendNotification` 直接复用，省一次连接开销（~300ms-1s）。`close()` 强制断开。
-
-### 推迟理由
-
-- MVP 阶段每次都走"连接→发帧→断开"已可用
-- 连接复用增加状态机复杂度（连接超时/断开重连/异常恢复）
-- 等项目有真机联调后再评估是否必要
+- 同设备不同 App 集成 SDK 各自跑在独立进程，`BluetoothGatt` 无法跨进程共享
+- 闹钟推送场景下单 App 短时间连续发多条通知的概率极低
+- 每次"扫描→连→发→断"流程已稳定，加复用徒增状态机复杂度
+- BLE GATT Server 本身支持多客户端并发，无需连接层优化
 
 ---
 
@@ -154,6 +160,7 @@ sealed class SdkError(val message: String) {
     class WriteFailed(cause: String) : SdkError("写入失败: $cause")
     class EncryptionFailed    : SdkError("加密失败")
     class Timeout             : SdkError("操作超时")
+    class AlreadyPaired        : SdkError("设备已绑定")
     class Closed              : SdkError("SDK 已关闭")
     class Unknown(cause: String) : SdkError(cause)
 }

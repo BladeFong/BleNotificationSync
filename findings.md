@@ -36,7 +36,7 @@
 | winrt-notification Toast builder 模式 | `title()`/`text1()`/`icon()` 均 consume self 返回新 Toast，需链式调用或重新赋值 |
 | WinRT Toast 操作中心清理 | 默认会留在操作中心 3 天。通过 `ToastNotificationManager::History.Clear(app_id)` 清理，epoch 防抖机制 3 分钟顺延 |
 | macOS 通知图标限制 | `notify-rust` 的 `icon()` 走 `NSUserNotification._identityImage` 私有 API 或 `UNUserNotificationCenter` 的 App Bundle 图标，无法设置单条通知的自定义内容图。需 `UNNotificationAttachment` 另做 |
-| 通知标题来源 | SDK 不包含 `NotificationListenerService`，标题由调用方提供。Demo 在 `strings.xml` 写死 `s_notify_title` |
+| 通知标题来源 | SDK 不包含 `NotificationListenerService`，标题由调用方提供。`sendNotification()` 新增 `title.ifBlank { getAppName() }` 默认用 App 名 |
 | 图标最大 60KB | 确保 255 帧内完成传输 |
 
 ## Skills Found

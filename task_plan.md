@@ -35,15 +35,15 @@ Phase 4
 - [x] 编写单元测试（54 纯 JVM 测试）
 - **Status:** complete
 
-### Phase 3.5: Android SDK API 改进（设计完成，实现中）
-- [ ] 配对持久化（SharedPreferences + baseKey 存储）
-- [ ] 权限内聚（BleClient.hasPermissions + 移除 @Suppress）
-- [ ] 结构化错误码（SdkError 密封类替换 String）
-- [ ] 生命周期管理（close()）
-- [ ] 连接复用（推迟）
+### Phase 3.5: Android SDK API 改进
+- [x] 配对持久化（EncryptedSharedPreferences + baseKey 存储，UUID 主键）
+- [x] 权限内聚（BleClient.getMissingPermissions + ensurePermissions）
+- [x] 结构化错误码（SdkError 密封类 12 子类型）
+- [x] 生命周期管理（close()）
+- [x] 连接复用（**不做**，同设备不同 App 独立进程无法共享 GATT，单 App 无复用需求）
 - 设计：`docs/superpowers/specs/2026-07-15-sdk-api-improvements-design.md`
 - 计划：`docs/superpowers/plans/2026-07-15-sdk-api-improvements.md`
-- **Status:** pending
+- **Status:** complete（除连接复用推迟外）
 
 ### Phase 4: 跨平台桌面端 (Tauri v2) — 替代原 Windows/macOS 独立实现
 - [x] 创建 Tauri v2 项目骨架（Rust + Vanilla JS）
@@ -54,7 +54,7 @@ Phase 4
 - [x] 实现事件处理（托盘菜单分发）
 - [x] 前端 UI（中英双语、状态显示、日志控制台、扫码绑定）
 - [x] 实现 BLE GATT Server（基于 ble-peripheral-rust 跨平台方案）
-- [x] 实现通知适配层（Tauri 跨平台组件 → notify_rust → PowerShell 三级回退）
+- [x] 实现通知适配层（Windows: winrt-notification Toast → PowerShell 兜底；非 Windows: notify-rust）
 - [x] 实现 macOS BLE 兼容层（基于 ble-peripheral-rust 实现 macOS 下的广播与服务）
 - **Status:** complete（Android↔Windows 联调通过，通知三级回退机制就绪）
 - **原代码：** `../windows/` 为旧 C# .NET WinForms 实现，已废弃

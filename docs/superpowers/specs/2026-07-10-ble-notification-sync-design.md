@@ -35,9 +35,9 @@
 
 | 项目 | 值 |
 |------|-----|
-| Service UUID | `0000A1B2-0000-1000-8000-00805F9B34FB` |
-| Write Characteristic | `0000C3D4-0000-1000-8000-00805F9B34FB` |
-| 属性 | WRITE_NO_RESPONSE |
+| Service UUID | `9e1d51a4-9c86-4447-9759-f6222b0f4b36` |
+| Write Characteristic | `f4788cde-8025-4c07-b352-87db1b272fdf` |
+| 属性 | Write + WriteWithoutResponse |
 
 ### 2.2 数据帧格式
 
@@ -61,7 +61,7 @@
 |----|------|------|------|
 | 0x01 | REGISTER | Android→PC | 绑定时发送 APP 信息 |
 | 0x02 | NOTIFY | Android→PC | 推送通知 |
-| 0x03 | ACK | PC→Android | 确认收到 |
+| 0x03 | ACK | PC→Android | 确认收到（协议保留，当前未实现） |
 | 0x04 | ICON_DATA | Android→PC | 图标分片数据 |
 | 0x05 | ICON_END | Android→PC | 图标传输完成 |
 
@@ -73,33 +73,28 @@
 {
   "app_name": "JustNow",
   "package": "com.nearby.justnow",
-  "random": "<base64 编码的 32 字节随机数>"
+  "random": "<32 字节随机数的 hex 编码（小写，64 字符）>",
+  "android_id": "abc123...",
+  "device_name": "Pixel 8 Pro"
 }
 ```
 
 - `app_name`：APP 显示名称（来自 SDK 调用参数）
 - `package`：Android 包名（来自 `context.packageName`）
 - `random`：Android 生成的 32 字节随机数，**十六进制字符串**（小写，64 字符）。用于密钥派生，双方各自 `HKDF(package+random) → baseKey` 后持久化
+- `android_id`：设备唯一标识（可选，来自 `Settings.Secure.ANDROID_ID`），用作设备主键，向后兼容时回退到 PC MAC
+- `device_name`：设备友好名称（可选，来自 `Build.MODEL`）
 
-#### NOTIFY
+#### NOTIFY（加密 payload 的明文 JSON）
 
 ```json
 {
   "title": "任务提醒",
-  "body": "会议还有10分钟",
-  "package": "com.nearby.justnow",
-  "timestamp": 1720000000000
+  "body": "会议还有10分钟"
 }
 ```
 
-#### ACK
-
-```json
-{
-  "code": 0,
-  "msg": "ok"
-}
-```
+NOTIFY 帧的 payload 结构为 `[pkg_len(1B) | package(pkg_len B) | nonce(12B) | ciphertext]`，其中 ciphertext 解密后得到以上 JSON。
 
 #### ICON_DATA
 
@@ -118,11 +113,7 @@
 
 #### ICON_END
 
-```json
-{
-  "total_size": 12345
-}
-```
+空 payload 帧，标记图标传输完成。桌面端收到后关闭图标接收缓冲区。
 
 ---
 
@@ -146,7 +137,7 @@
 |------|------|
 | 生成时机 | APP 绑定配对时 |
 | 生成方式 | Android 生成 32 字节随机数，通过 REGISTER 帧发给桌面，双方各自 `HKDF(package+random) → baseKey` |
-| 保存位置 | Android 端：SharedPreferences 存 `baseKey`<br>PC/Mac 端：按 MAC + 包名管理 |
+| 保存位置 | Android 端：EncryptedSharedPreferences 存 `baseKey`（按 UUID 索引）<br>PC/Mac 端：按设备 ID（Android ID） + 包名管理，baseKey 存 Windows Credential Manager / macOS Keychain |
 | 随机数传递 | REGISTER 帧中明文携带，配对后丢弃 |
 
 **密钥派生算法**（两端实现必须一致）：
@@ -190,9 +181,9 @@ ciphertext = AES-256-GCM-Encrypt(baseKey, nonce, plaintext)
 | 4. 发送: [package | nonce | ciphertext]|
 |    (package 明文，其余加密)           |
 |         --------BLE--------->        |
-|                                      | 5. 获取连接设备 MAC |
-|                                      | 6. 解析 Package 明文|
-|                                      | 7. MAC + Package   |
+|                                      | 5. 解析 Package 明文|
+|                                      | 6. 遍历已配对设备   |
+|                                      |    按 Package 匹配  |
 |                                      |    → 查找密钥       |
 |                                      | 8. plaintext =     |
 |                                      |    AES-GCM-Decrypt |
@@ -220,7 +211,7 @@ ciphertext = AES-256-GCM-Encrypt(baseKey, nonce, plaintext)
 
 **解密逻辑**：
 1. GATT Server 解析出 Package（明文）
-2. 用连接设备 MAC + Package 查找密钥
+2. 遍历已配对设备，按 Package 匹配，尝试每个匹配设备的 baseKey
 3. 用密钥 + Nonce 解密 Ciphertext
 
 ### 2.5.5 绑定流程（加密版）
@@ -229,16 +220,19 @@ ciphertext = AES-256-GCM-Encrypt(baseKey, nonce, plaintext)
 Android                                       PC/Mac
    |                                             |
    | 1. 生成 32B 随机数 random                   |
-   | 2. REGISTER({app_name, package, random})    |
+   | 2. REGISTER({app_name, package, random,     |
+   |      android_id, device_name})              |
    | ----------------------------------------->  |
    |                                             | 3. baseKey = HKDF(package + random)
-   |                                             | 4. 存储: MAC→(package, app_name, baseKey)
-   | 5. ACK({code: 0})                          |
-   | <-----------------------------------------  |
-   | 6. baseKey = HKDF(package + random)         |
-   | 7. 存储: package→(MAC, appName, baseKey)    |
+   |                                             | 4. 存储: device_id→(package, app_name, baseKey)
+   | 5. baseKey = HKDF(package + random)         |
+   | 6. 存储: uuid→(appName, baseKey)            |
+   |    (EncryptedSharedPreferences)              |
+   | 7. 发送 ICON_DATA × N + ICON_END            |
+   | ----------------------------------------->  |
+   |                                             | 8. 缓存图标到 %APPDATA%/icons/
    |                                             |
-   | 8. 后续通知 AES-256-GCM(baseKey, nonce, pt) |
+   | 9. 后续通知 AES-256-GCM(baseKey, nonce, pt) |
    | ==========================================>  |
 ```
 
@@ -298,27 +292,30 @@ flowchart LR
 ### 4.1 二维码内容
 
 ```
-ble://pair?mac=XX:XX:XX:XX:XX:XX&uuid=0000A1B2-0000-1000-8000-00805F9B34FB
+ble://pair?uuid=9e1d51a4-9c86-4447-9759-f6222b0f4b36&mac=XX:XX:XX:XX:XX:XX&name=MyPC
 ```
 
-### 4.2 配对时序图（含密钥交换）
+- `uuid`：服务 UUID（**必填**），Android 端用于扫描过滤
+- `mac`：蓝牙 MAC（可选，用于直连回退）
+- `name`：设备友好名称（可选，用于 UI 显示）
+
+### 4.2 配对时序图
 
 ```mermaid
 sequenceDiagram
     participant A as Android
     participant P as PC/Mac
 
-    A->>P: 1. 扫描二维码获取 MAC
-    A->>P: 2. 连接 GATT Server
+    A->>P: 1. 扫描二维码获取 UUID
+    A->>P: 2. BLE 扫描 → 连接 GATT Server
     A->>P: 3. 请求 MTU (247)
-    A->>P: 4. 发送 REGISTER (app_name, package)
-    P-->>P: 存储 APP 信息 + 生成密钥
-    P->>A: 5. 发送 ACK（含密钥，明文）
-    A-->>A: 保存密钥到本地
-    A->>P: 6. 发送 ICON_DATA × N (图标分片)
-    A->>P: 7. 发送 ICON_END
-    P-->>P: 缓存图标
-    P->>A: 8. 发送 ACK
+    A->>P: 4. 发送 REGISTER (app_name, package, random, android_id, device_name)
+    P-->>P: 5. 派生 baseKey = HKDF(package + random)
+    P-->>P: 6. 存储 device_id→(package, app_name, baseKey)
+    A-->>A: 7. 派生 baseKey = HKDF(package + random)
+    A-->>A: 8. 存储到 EncryptedSharedPreferences
+    A->>P: 9. 发送 ICON_DATA × N + ICON_END
+    P-->>P: 10. 缓存图标到本地
     Note over A,P: 绑定完成，后续通知加密传输
 ```
 
@@ -331,7 +328,7 @@ stateDiagram-v2
     连接中 --> 未绑定: 超时/失败
     连接中 --> 注册中: GATT就绪
     注册中 --> 未绑定: 注册失败
-    注册中 --> 已绑定: 收到ACK
+    注册中 --> 已绑定: REGISTER成功
     已绑定 --> [*]
 ```
 
@@ -342,22 +339,18 @@ flowchart TD
     A[业务层调用 startPairing] --> B[SDK 启动扫码]
     B --> C{扫码成功?}
     C -->|失败| D[回调 onError]
-    C -->|成功| E[解析 MAC + UUID]
-    E --> F[连接 GATT Server]
+    C -->|成功| E[解析 UUID]
+    E --> F[BLE 扫描 + 连接 GATT Server]
     F --> G{连接成功?}
     G -->|失败| D
     G -->|成功| H[请求 MTU 247]
     H --> I[发送 REGISTER]
-    I --> J{收到 ACK?}
-    J -->|超时/失败| D
-    J -->|成功| K[从 ACK 获取密钥]
-    K --> K2[SDK 存储密钥]
-    K2 --> L[发送 ICON_DATA × N]
+    I --> J{桌面端派生并存储密钥}
+    J --> K[SDK 派生并存储密钥]
+    K --> L[发送 ICON_DATA × N]
     L --> M[发送 ICON_END]
-    M --> N{收到 ACK?}
-    N -->|超时/失败| D
-    N -->|成功| O[回调 onPaired]
-    O --> P[SDK 存储绑定信息]
+    M -->|成功| N[回调 onPaired]
+    N --> O[桌面端缓存图标]
 ```
 
 ---
@@ -421,11 +414,12 @@ class BleNotificationSDK {
 }
 
 interface PairingCallback {
-    fun onScanSuccess(mac: String)
+    fun onScanSuccess()
+    fun onQrResult(mac: String, uuid: String)
     fun onConnecting()
     fun onRegistering()
     fun onPaired()
-    fun onError(error: PairingError)
+    fun onError(error: SdkError)
 }
 ```
 
@@ -485,23 +479,23 @@ interface SendCallback {
 
 ```mermaid
 flowchart TD
-    A[闹钟触发] --> B{BLE 连接状态}
-    B -->|已连接| C[发送 NOTIFY]
-    B -->|未连接| D[连接 GATT Server]
-    D --> E{连接成功?}
-    E -->|失败| F[只发本地通知]
-    E -->|成功| C
-    C --> G[收到 ACK]
-    G --> H[断开连接]
-    H --> I[回调 onSynced success=true]
-    F --> J[回调 onSynced success=false]
+    A[闹钟触发] --> B[启动 BleForegroundService]
+    B --> C[BLE 扫描 + 连接 GATT Server]
+    C --> D{连接成功?}
+    D -->|失败| E[只发本地通知]
+    D -->|成功| F[发送 NOTIFY]
+    F --> G[3 秒后断开连接]
+    G --> H[回调 onSynced success=true]
+    E --> I[回调 onSynced success=false]
 ```
 
 ### 6.2 连接策略
 
-- **每次通知独立连接，用完即断**
-- 不需要保活 Service
-- 不需要前台 Service
+- **每次通知独立连接，用完即断**（3 秒延迟断开）
+- Android 端使用 `BleForegroundService`（前台 Service）保证后台 BLE 扫描不被系统杀掉
+- 支持 WorkManager `BleScanWorker` 作为后备唤醒机制
+- 连接方式：BLE 扫描 → 按 Service UUID 过滤 → 连接 GATT，而非仅依赖 MAC 直连
+- 扫描超时 10 秒，双重回退（先按设备名扫描，再按 UUID 扫描）
 - 连接耗时约 300ms - 1 秒
 
 ### 6.3 断线处理
@@ -514,49 +508,59 @@ flowchart TD
 
 ---
 
-## 7. PC/Mac 端设计
+## 7. 桌面端设计（Tauri v2）
 
-### 7.1 Windows 端
+### 7.1 技术栈
 
-| 项目 | 技术选型 |
-|------|----------|
-| 语言 | C# / .NET 8 |
-| UI | WinForms + NotifyIcon（系统托盘） |
-| GATT Server | Windows.Devices.Bluetooth.GenericAttributeProfile |
-| 广播 | BluetoothLEAdvertisementPublisher |
-| 通知 | Microsoft.Toolkit.Uwp.Notifications (Toast) |
+| 层 | 技术 |
+|----|------|
+| 桌面框架 | Tauri v2（`tray-icon` 特性） |
+| 后端 | Rust (edition 2021) + tokio 异步 |
+| 前端 | Vanilla HTML/CSS/JS，零构建工具 |
+| BLE 外设 | `ble-peripheral-rust` v0.2（跨平台） |
+| 加密 | `aes-gcm` 0.10 + `hkdf` 0.12 + `sha2` 0.10 |
+| 密钥存储 | Windows Credential Manager / macOS Keychain / Linux Secret Service（`keyring` crate） |
+| 通知（Windows） | `winrt-notification` Toast + PowerShell BalloonTip 兜底 |
+| 通知（非 Windows） | `notify-rust`（libnotify / UNUserNotificationCenter） |
+| 单实例 | `tauri-plugin-single-instance` v2 |
 
-**核心模块**：
-
-```
-BleNotificationWin/
-├── TrayApp.cs              # 托盘应用
-├── GattServerService.cs    # GATT 服务
-├── NotificationManager.cs  # 通知管理
-├── PairingStorage.cs       # 配对存储
-└── IconCache.cs            # 图标缓存
-```
-
-### 7.2 macOS 端
-
-| 项目 | 技术选型 |
-|------|----------|
-| 语言 | Swift |
-| UI | SwiftUI MenuBarExtra（菜单栏） |
-| GATT Server | CoreBluetooth.CBPeripheralManager |
-| 广播 | startAdvertising |
-| 通知 | UserNotifications |
-
-**核心模块**：
+### 7.2 Rust 模块架构
 
 ```
-BleNotificationMac/
-├── MenuBarApp.swift        # 菜单栏应用
-├── PeripheralManager.swift # GATT 服务
-├── NotificationService.swift # 通知服务
-├── PairingStorage.swift    # 配对存储
-└── IconCache.swift         # 图标缓存
+src-tauri/src/
+├── main.rs          # 入口：panic hook → lib::run()
+├── lib.rs           # 应用核心：托盘菜单、窗口管理、13 个 Tauri 命令注册、NotifyState
+├── ble.rs           # BLE GATT Server（ble-peripheral-rust 跨平台方案）
+├── crypto.rs        # AES-256-GCM + HKDF-SHA256
+├── event_handler.rs # 托盘菜单事件分发
+├── protocol.rs      # BLE 二进制帧协议（解析/构建）
+├── notify.rs        # 通知适配（Windows: winrt-notification, 非Windows: notify-rust）
+│                    #   + NotifyState epoch 防抖清理 + PowerShell 兜底
+├── config.rs        # 配置管理 + 图标存储 + 密钥安全存储
+└── storage.rs       # 配对设备存储 + 注册表设置（开机自启/静默模式）
 ```
+
+### 7.3 通知三级策略（Windows）
+
+1. **安装版**：`winrt-notification` → WinRT Toast（支持大图标，3 分钟 epoch 防抖清理操作中心）
+2. **开发版/失败兜底**：PowerShell `NotifyIcon.BalloonTip`
+3. **非 Windows**：`notify-rust` → libnotify（Linux）/ UNUserNotificationCenter（macOS）
+
+安装版检测：通过 `HKCU\...\Uninstall\BLE Notification Sync\InstallLocation` 注册表比对运行路径。
+
+### 7.4 托盘功能
+
+- 显示窗口 / 启动服务（勾选）/ 开机自启动（勾选）/ 静默启动服务（勾选）/ 退出
+- 窗口关闭行为：隐藏而非退出（`CloseRequested` → `prevent_close`）
+- 静默模式：启动时直接隐藏窗口并启动 BLE 服务
+
+### 7.5 图标管理
+
+- 图标存储：`%APPDATA%/ble-notification-sync/icons/<package_name>.png`
+- 绑定时通过 ICON_DATA/ICON_END 分片接收，落盘后通知复用
+- Windows Toast 通知左侧图标优先使用对应 App 图标，回退到安装目录 `icon.ico`
+
+> **废弃代码**：`../windows/`（C# WinForms）和 `../macos/`（Swift）目录为旧实现，已由 Tauri v2 统一方案替代。
 
 ---
 
@@ -631,33 +635,47 @@ BleNotificationMac/
 ```
 BleNotificationSync/
 ├── third_party/              # 第三方库源码
-│   └── libtomcrypt/          # LibTomCrypt 源码（MIT 许可）
+│   └── libtomcrypt/          # LibTomCrypt 源码（MIT 许可，仅 Android JNI 使用）
 ├── android/                  # Android SDK (Kotlin AAR)
 │   ├── sdk/                  # SDK 核心模块
-│   │   ├── crypto/           # 加密模块 (JNI 桥接)
-│   │   ├── ble/              # BLE 通信模块
-│   │   ├── protocol/         # 协议编解码
-│   │   ├── qr/               # 二维码扫描
-│   │   └── pairing/          # 配对管理
-│   ├── sample/               # 示例 App
+│   │   ├── crypto/           # 加密模块 (JNI + NativeCrypto)
+│   │   ├── ble/              # BLE 通信模块（扫描/连接/权限）
+│   │   ├── protocol/         # 协议编解码（FrameEncoder/FrameDecoder）
+│   │   ├── qr/               # 二维码扫描（分层：解码/相机/UI）
+│   │   ├── pairing/          # 配对管理（EncryptedSharedPreferences）
+│   │   ├── sdk/              # SDK 入口 + 闹钟/前台Service
+│   │   └── ui/               # 设备管理 Fragment
 │   └── build.gradle.kts
-├── desktop/                  # Tauri 跨平台桌面端 (Rust + Web)
+├── examples/
+│   └── android-demo/         # Demo App
+├── desktop/                  # Tauri v2 跨平台桌面端 (Rust + Vanilla JS)
 │   ├── src-tauri/            # Rust 后端
 │   │   ├── src/
-│   │   │   ├── main.rs       # 入口
-│   │   │   ├── ble.rs        # BLE GATT Server
-│   │   │   ├── crypto.rs     # 加密模块
-│   │   │   ├── protocol.rs   # 协议编解码
-│   │   │   └── storage.rs    # 配对/密钥存储
+│   │   │   ├── main.rs       # 入口（panic hook + crash.log）
+│   │   │   ├── lib.rs        # 应用核心（托盘/窗口/菜单/命令注册）
+│   │   │   ├── ble.rs        # BLE GATT Server（FragmentBuffer 分片重组）
+│   │   │   ├── crypto.rs     # AES-256-GCM + HKDF-SHA256
+│   │   │   ├── protocol.rs   # 二进制帧协议（MSG_REGISTER/NOTIFY/ICON_DATA/ICON_END）
+│   │   │   ├── notify.rs     # 通知适配（NotifyState epoch 防抖）
+│   │   │   ├── config.rs     # 配置 + 图标存储 + keyring 密钥管理
+│   │   │   ├── storage.rs    # 配对设备存储 + 注册表设置
+│   │   │   └── event_handler.rs # 托盘菜单事件分发
 │   │   ├── Cargo.toml
 │   │   └── tauri.conf.json
-│   ├── src/                  # Web 前端
+│   ├── src/                  # Web 前端（中英双语 i18n 内嵌）
 │   │   ├── index.html
 │   │   ├── main.js
 │   │   └── styles.css
 │   └── package.json
+├── windows/                  # [已废弃] 旧 C# .NET WinForms 实现
+├── macos/                    # [已废弃] 旧 macOS Swift 实现（空目录）
 ├── docs/                     # 文档
-│   └── superpowers/          # 设计文档
+│   ├── superpowers/specs/    # 设计文档
+│   ├── superpowers/plans/    # 实现计划
+│   └── reference/            # 原始方案参考
+├── task_plan.md              # planning-with-files 任务计划
+├── findings.md               # 研究发现与技术决策
+├── progress.md               # 进度日志
 ├── LICENSE
 └── README.md
 ```
@@ -666,11 +684,13 @@ BleNotificationSync/
 
 ## 11. 实现阶段
 
-| 阶段 | 内容 | 产出 |
+| 阶段 | 内容 | 状态 |
 |------|------|------|
-| 1 | 协议规范文档 | 设计文档 |
-| 2 | Android SDK 实现 | 可集成的 AAR 库（含加密） |
-| 3 | Tauri 桌面端骨架 | 可运行的空窗口 + BLE 基础 |
-| 4 | Tauri BLE GATT Server | 接收通知功能 |
-| 5 | Tauri UI 实现 | 配对/状态/日志界面 |
-| 6 | 联调测试 | Android + PC/Mac 互通验证 |
+| 1 | 协议规范文档 | ✅ 完成 |
+| 2 | Android SDK 实现（54 单元测试） | ✅ 完成 |
+| 3 | SDK API 改进（持久化/权限/错误码/生命周期） | ✅ 完成（连接复用推迟） |
+| 4 | Tauri v2 桌面端骨架 + BLE GATT Server | ✅ 完成 |
+| 5 | 桌面端 UI + 通知适配 + 图标同步 | ✅ 完成 |
+| 6 | Android ↔ Windows 联调测试 | ✅ 完成 |
+| 7 | Android ↔ macOS 联调测试 | ⏳ 待进行 |
+| 8 | README 和集成文档 | ⏳ 待进行 |

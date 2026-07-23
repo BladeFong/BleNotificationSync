@@ -1,6 +1,13 @@
 # SDK API 改进 实现计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **状态更新（2026-07-23）**：全部 Tasks 1-7 已完成（连接复用推迟除外）。实际实现与以下原始计划存在关键差异：
+> - 配对主键：MAC → Android ID（UUID）
+> - 存储：SharedPreferences → EncryptedSharedPreferences
+> - PairedDevice 字段：`(packageName, mac, appName)` → `(uuid, name, appName, pairedAt)`
+> - 前端使用 `QrScannerFragment` + `startPairingDirectly` 替代计划中的直接 `startPairing`
+> - SDK API 新增：`getAppName()`、`unpairAll()`、`getBaseKey()`
+> - SdkError 新增：`AlreadyPaired`
+> - 以下为原始计划，部分细节（SharedPreferences 键名、PairedDevice 字段等）已偏离实际实现。以当前代码和设计文档 §5 为准。
 
 **Goal:** 修复 BleNotificationSync Android SDK 的 5 项 API 缺陷——配对持久化、权限内聚、结构化错误码、生命周期管理（连接复用推迟）。
 

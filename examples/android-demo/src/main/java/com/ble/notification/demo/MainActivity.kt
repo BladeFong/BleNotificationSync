@@ -180,7 +180,7 @@ class MainActivity : AppCompatActivity() {
         log("设置闹钟: $message")
         sdk.setReminder(
             taskId = "demo_${System.currentTimeMillis()}",
-            title = getString(R.string.s_notify_title),
+            title = sdk.getAppName(),
             body = message,
             triggerAt = triggerAt,
             callback = object : ReminderCallback {

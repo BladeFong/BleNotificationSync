@@ -1,5 +1,13 @@
 # Progress Log
 
+## 2026-07-23 — SDK 通知标题默认获取 App 名
+
+- **问题**：Demo 在 `strings.xml` 写死 `s_notify_title`，集成 App 可能照抄导致通知标题无辨识度。
+- **SDK 改动**：
+  - `BleNotificationSDK.kt` 新增 `getAppName()` 公开方法（从 `ApplicationInfo.label` 读取）。
+  - `sendNotification()` 内 `title.ifBlank { getAppName() }`，标题为空时自动填 App 名。
+- **Demo 改动**：`doSendReminder()` 中 `getString(R.string.s_notify_title)` 改为 `sdk.getAppName()`，删除中英文 `s_notify_title` 字符串资源。
+
 ## 2026-07-23 — 通知清理策略与代码质量修复
 
 - **通知防抖清理**：WinRT Toast 默认留在操作中心，展示后 3 分钟通过 `ToastNotificationManager::History.Clear()` 清理。epoch 机制保证期间新通知顺延，避免误清。

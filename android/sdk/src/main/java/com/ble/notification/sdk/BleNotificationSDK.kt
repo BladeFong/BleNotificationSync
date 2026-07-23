@@ -197,8 +197,16 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
     // ── 通知发送 ──
 
+    /** 获取集成 App 的显示名称（来自 AndroidManifest application label） */
+    fun getAppName(): String {
+        val pm = context.packageManager
+        val ai = pm.getApplicationInfo(context.packageName, 0)
+        return pm.getApplicationLabel(ai).toString()
+    }
+
     fun sendNotification(title: String, body: String, callback: SendCallback? = null) {
         if (checkClosed(callback)) return
+        val finalTitle = title.ifBlank { getAppName() }
         val devices = pairingManager.getPairedDevices()
         if (devices.isEmpty()) {
             callback?.onError(SdkError.NotPaired())
@@ -217,7 +225,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 val frame = FrameEncoder.encodeNotify(
                     key = baseKey,
                     packageName = context.packageName,
-                    title = title,
+                    title = finalTitle,
                     body = body,
                     timestamp = System.currentTimeMillis()
                 )

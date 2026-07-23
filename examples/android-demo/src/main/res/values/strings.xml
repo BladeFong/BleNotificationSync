@@ -7,7 +7,6 @@
     <string name="s_default_text">Test Notification Message</string>
     <string name="s_app_display_name">BLE Sync Demo</string>
     <string name="s_unpaired">Unpaired</string>
-    <string name="s_notify_title">BLE Sync Test</string>
     <string name="s_clear_log">Clear Log</string>
     <string name="s_device_manager_loading">PC Device Manager (Loading…)</string>
     <string name="s_device_manager_paired">PC Device Manager (%1$d Paired)</string>

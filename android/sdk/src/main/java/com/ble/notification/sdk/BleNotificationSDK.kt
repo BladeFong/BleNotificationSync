@@ -143,20 +143,10 @@ class BleNotificationSDK private constructor(private val context: Context) {
             override fun onConnecting() = callback.onConnecting()
             override fun onRegistering() = callback.onRegistering()
             override fun onPaired() {
-                // 绑定成功时，自动注册系统 BLE PendingIntent 后台扫描
-                registerSystemScan()
                 callback.onPaired()
             }
             override fun onError(error: SdkError) = callback.onError(error)
         })
-    }
-
-    /**
-     * 显式注册系统级 BLE PendingIntent 扫描。
-     * 当系统扫描命中已关联 PC 时，自动弹出系统通知并写入 Log。
-     */
-    fun registerSystemScan() {
-        ScanRegistrationManager.register(context.applicationContext)
     }
 
     fun startPairing(activity: FragmentActivity, appName: String, callback: PairingCallback) {
@@ -186,15 +176,12 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
     fun unpair(uuid: String) {
         pairingManager.unpair(uuid)
-        if (getPairedDevices().isEmpty()) {
-            ScanRegistrationManager.unregister(context.applicationContext)
-        }
     }
 
     fun unpairAll() {
         pairingManager.unpairAll()
-        ScanRegistrationManager.unregister(context.applicationContext)
     }
+
 
 
     // ── UI 入口 ──

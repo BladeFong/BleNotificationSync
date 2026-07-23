@@ -86,10 +86,6 @@ class MainActivity : AppCompatActivity() {
         // 幂等方法：检查所有权限（BLE + 位置），从系统设置返回时会重新申请
         sdk.ensurePermissions(this)
 
-        if (sdk.isPaired()) {
-            sdk.registerSystemScan()
-        }
-
         // 恢复缓存日志
         val cached = LogRepository.getAll(this)
         if (cached.isNotEmpty()) {
@@ -99,12 +95,28 @@ class MainActivity : AppCompatActivity() {
         updateButtonStates()
     }
 
+
     private fun log(msg: String) {
-        LogRepository.append(this, msg)
+        val (entry, isUpdated) = LogRepository.appendOrUpdate(this, msg)
         runOnUiThread {
-            tvLog.append("$msg\n")
+            if (isUpdated) {
+                val currentText = tvLog.text.toString().trimEnd()
+                val lastNewLineIndex = currentText.lastIndexOf('\n')
+                if (lastNewLineIndex >= 0) {
+                    tvLog.text = currentText.substring(0, lastNewLineIndex + 1) + entry + "\n"
+                } else {
+                    tvLog.text = entry + "\n"
+                }
+            } else {
+                if (tvLog.text.isNotEmpty() && !tvLog.text.endsWith("\n")) {
+                    tvLog.append("\n")
+                }
+                tvLog.append("$entry\n")
+            }
         }
     }
+
+
 
     private fun startPairing() {
         log("开始扫描绑定…")
@@ -123,9 +135,9 @@ class MainActivity : AppCompatActivity() {
                 log("正在注册…")
             }
             override fun onPaired() {
-                log("绑定成功！已自动注册系统 BLE 后台扫描")
+                log("绑定成功！")
                 runOnUiThread {
-                    Toast.makeText(this@MainActivity, "绑定成功！系统扫描已激活", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "绑定成功！", Toast.LENGTH_SHORT).show()
                     updateButtonStates()
                 }
             }
@@ -247,6 +259,8 @@ class MainActivity : AppCompatActivity() {
     }
 
 
+    private var lastPairedCount: Int? = null
+
     private fun updateButtonStates() {
         val pairedDevices = sdk.getPairedDevices()
         val count = pairedDevices.size
@@ -257,8 +271,13 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.s_device_manager_none)
         }
 
-        log("设备状态: 已绑定数量=$count")
+        if (lastPairedCount != count) {
+            lastPairedCount = count
+            log("设备绑定状态更新: 当前已绑定数量=$count")
+        }
     }
+
+
 
 }
 

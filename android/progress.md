@@ -1,6 +1,12 @@
 # Android SDK — 进度日志
 
+## 2026-07-23 — 智能日志去重更新与设备状态动态跟踪优化
+- 智能日志去重与原地时间戳更新：重构 `LogRepository.appendOrUpdate`，当连续收到的日志文本（剔除前导时间戳后）与上一条完全一致时，自动在 SharedPreferences 和 UI 界面中原地更新最后一行的时间戳为最新时间（`HH:mm:ss`）；文本改变时才在下方新起一行追加，解决日志刷屏与时间缺失粘连问题。
+- 设备状态动态跟踪：在 `MainActivity` 中引入 `lastPairedCount` 精准追踪绑定设备数量变动，仅在解绑或绑定设备发生真实数量改变时打出日志，提升界面操控体验。
+- 清理废弃尝试代码：彻底清理系统扫描相关的临时尝试代码与接口，保持代码库整洁与稳定。
+
 ## 2026-07-22 — 审查细节补全：GATT 写入 API 33 兼容封装与权限请求现代化
+
 - GATT 写入 API 兼容：新增 `BleCompat.writeCharacteristic`，在 Android 13 (API 33)+ 上全面适配 `gatt.writeCharacteristic(characteristic, value, writeType)` 官方推荐 API，低版本平滑降级，移除了所有 Deprecation 警告。
 - 权限请求现代化：Demo 模块将 `POST_NOTIFICATIONS` 权限请求全量迁移至 Activity Result API (`registerForActivityResult(ActivityResultContracts.RequestPermission())`)。
 - Compose 暗色模式深度适配：`DeviceManagerFragment` 空状态控件色值全面对接 `MaterialTheme.colors`，提升各种动态主题下的对比度与视觉体验。

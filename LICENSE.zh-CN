@@ -1,26 +1,36 @@
-# Apache License 2.0 中文参考译本
+# Apache License 2.0 开源协议与专利保护声明 (中文参考)
 
-> 本文档为 Apache License 2.0 的中文参考译本，不具备法律效力。
-> 法律上有效的协议文本为项目根目录下的 [LICENSE](LICENSE) 文件（英文原文）。
+> **重要说明**：本项目采用国际标准的 **Apache License 2.0** 开源协议。该协议内置了严格的**专利授权与专利反击防范条款（Defensive Patent Termination）**，防范他人利用开源代码申请专利或发起专利诉讼。
+> 法律上具有约束力的完整文本以项目根目录下的 [LICENSE](LICENSE) 英文原文为准。
 
 ---
 
-## 专利声明
+## 1. 专利保护与防范机制 (Apache 2.0 第 3 条解析)
 
-本软件实现了一种基于 GATT 的 BLE 通知帧跨平台通知同步方法。版权方已就该
-方法提交或正在准备专利申请。
+为防止第三方“拿开源代码去申请专利反过来起诉开源作者或使用者”，Apache License 2.0 规定了以下两条强制法律约束：
 
-使用本软件本身**不**授予超出 Apache 2.0 第 3 条范围的 GATT 通知同步方法
-专利许可。实现该方法的商业或衍生产品可能需要另行取得专利权人的专利授权。
+1. **自动专利授权 (Grant of Patent License)**：
+   任何使用、修改或分发本开源项目的个人或企业（贡献者/使用者），即自动授予所有其他使用者永久、全球性、非排他、无版税的专利许可。
+2. **专利反击与自动终止条款 (Defensive Patent Termination)**：
+   **若任何实体对本项目或其使用者发起专利侵权诉讼，该实体根据本协议所获得的所有专利许可与代码授权将在诉讼发起之日起自动终止！**
 
-## 第三方声明
+---
 
-本项目包含以下第三方开源软件：
+## 2. 专利保留与商业授权声明
 
-- **libtomcrypt** (https://github.com/libtom/libtomcrypt)
-  协议：Public domain / Unlicense
-  详见：third_party/libtomcrypt/LICENSE
+本项目包含基于 GATT 的 BLE 帧近场通知同步实现方法。版权方保留相关核心算法与技术方案的原始专利申请权：
+- **开源使用**：在遵循 Apache 2.0 协议条款的前提下，任何个人和开源社区均可免费使用、研究及修改。
+- **商业反起诉保护**：禁止任何第三方将本开源项目的公开源码或核心逻辑私自申请排他性独占专利，并向本开源项目及社区使用者索赔或维权。
 
-- **libtommath** (https://github.com/libtom/libtommath)
-  协议：Public domain / Unlicense
-  详见：third_party/libtommath/LICENSE
+---
+
+## 3. 第三方开源依赖声明
+
+本项目包含并使用了以下第三方开源组件：
+
+- **libtomcrypt** ([https://github.com/libtom/libtomcrypt](https://github.com/libtom/libtomcrypt))
+  - 许可协议：Public Domain / Unlicense
+  - 源码位置：`third_party/libtomcrypt/`
+- **libtommath** ([https://github.com/libtom/libtommath](https://github.com/libtom/libtommath))
+  - 许可协议：Public Domain / Unlicense
+  - 源码位置：`third_party/libtommath/`

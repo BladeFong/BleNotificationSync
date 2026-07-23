@@ -13,7 +13,8 @@ releases/
 │   └── ble-notification-demo.apk       # Android 演示 App 安装包 (APK)
 ├── windows/
 │   └── ble-notification-sync.exe       # Windows 桌面端直接运行包 (EXE)
-└── linux/                              # Linux 预编译运行包位置
+└── linux/
+    └── ble-notification-sync          # Linux 64位预编译可执行文件 (二进制)
 ```
 
 ---
@@ -26,3 +27,10 @@ releases/
 
 ### 2. Windows
 - **`ble-notification-sync.exe`**：双击即可直接运行 BLE 通知监听服务与 GUI 管理界面。
+
+### 3. Linux
+- **`ble-notification-sync`**：预编译 64 位 Linux 二进制可执行文件。在终端运行：
+  ```bash
+  chmod +x ble-notification-sync
+  ./ble-notification-sync
+  ```

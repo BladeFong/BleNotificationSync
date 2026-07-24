@@ -9,6 +9,7 @@
 - **设备单独移除功能**：设备项右侧加入专有 `✕` 移除按钮，点击触发 `remove_paired_device` 命令从内存和系统凭据库擦除密钥。若已解绑的设备再次发来通知消息，后端将自动静默丢弃。
 - **文档规范精简**：清理 `CLAUDE.md` 中的设计细节与状态快照，仅保留编译/运行规则与专门文档指针。
 - **全平台发布覆盖**：解决 Windows 侧 Rust 编译文件锁占用死锁，以非交互式方式重新编译并重新打包生成了 Windows 安装包（MSI & NSIS）与 Linux 预编译二进制，覆盖至 `releases/` 发布目录下。
+- **预编译包压缩**：为缩小仓库体积并防止 Linux 二进制权限丢失，已将 Linux 预编译版压缩为 `ble-notification-sync.tar.gz` (3.3MB)，Windows 独立版压缩为 `ble-notification-sync.zip` (2.4MB)，并移除了未压缩的原始二进制追踪，同步更新了 releases 目录下的 README.md 引导文档。
 
 ## 2026-07-23 — 全平台编译验证通过
 

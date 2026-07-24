@@ -103,8 +103,10 @@
 ### 第三轮：暂缓项处理
 
 **FrameEncoder JSON 序列化**：
-- 移除手动 `jsonString()` / `buildJson()` 拼接
-- 改用 `org.json.JSONObject`（Android SDK 内置，零额外依赖），消除注入风险
+- 评估后保留手动 `jsonValue()` / `buildJson()` 拼接方案
+- 原因：帧 payload 仅 3-5 个字段且协议极简，引入 `org.json.JSONObject` 增加依赖无实际收益
+- 补充注释说明仅需转义 5 个 RFC 8259 字符，其他 Unicode 控制字符不出现于通知文本
+- 桌面端 `serde_json` 解析 `NotifyData { title, body }` 忽略 `timestamp` 字段，不受影响
 
 **Compose 字体规范**：
 - `DeviceManagerFragment` 定义 `TextSizeTitle`/`TextSizeBody`/`TextSizeCaption` 常量（对齐 CLAUDE.md dimens 标准）

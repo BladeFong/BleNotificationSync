@@ -1,7 +1,6 @@
 package com.ble.notification.protocol
 
 import com.ble.notification.crypto.AesGcmCrypto
-import org.json.JSONObject
 
 /**
  * Encodes BLE notification frames according to the protocol spec.
@@ -32,14 +31,19 @@ object FrameEncoder {
         deviceName: String? = null
     ): ByteArray {
         val randomHex = random.joinToString("") { "%02x".format(it) }
-        val json = JSONObject().apply {
-            put("app_name", appName)
-            put("package", packageName)
-            put("random", randomHex)
-            if (!androidId.isNullOrBlank()) put("android_id", androidId)
-            if (!deviceName.isNullOrBlank()) put("device_name", deviceName)
+        val fields = mutableListOf<Pair<String, String>>(
+            "app_name" to jsonValue(appName),
+            "package" to jsonValue(packageName),
+            "random" to jsonValue(randomHex)
+        )
+        if (!androidId.isNullOrBlank()) {
+            fields.add("android_id" to jsonValue(androidId))
         }
-        return buildFrame(MessageType.REGISTER, 0, 1, json.toString().toByteArray(Charsets.UTF_8))
+        if (!deviceName.isNullOrBlank()) {
+            fields.add("device_name" to jsonValue(deviceName))
+        }
+        val json = buildJson(*fields.toTypedArray())
+        return buildFrame(MessageType.REGISTER, 0, 1, json.toByteArray(Charsets.UTF_8))
     }
 
 
@@ -62,11 +66,11 @@ object FrameEncoder {
         body: String,
         timestamp: Long
     ): ByteArray {
-        val plaintext = JSONObject().apply {
-            put("title", title)
-            put("body", body)
-            put("timestamp", timestamp)
-        }.toString()
+        val plaintext = buildJson(
+            "title" to jsonValue(title),
+            "body" to jsonValue(body),
+            "timestamp" to timestamp.toString()
+        )
         val encrypted = AesGcmCrypto.encrypt(
             key,
             plaintext.toByteArray(Charsets.UTF_8)
@@ -114,7 +118,7 @@ object FrameEncoder {
      * @return encoded frame bytes
      */
     fun encodeIconEnd(totalSize: Int): ByteArray {
-        val json = JSONObject().apply { put("total_size", totalSize) }.toString()
+        val json = buildJson("total_size" to totalSize.toString())
         return buildFrame(MessageType.ICON_END, 0, 1, json.toByteArray(Charsets.UTF_8))
     }
 
@@ -136,5 +140,36 @@ object FrameEncoder {
         payload.copyInto(frame, offset)
 
         return frame
+    }
+
+    /**
+     * Escape a string value for safe JSON embedding.
+     * Covers the five characters that must be escaped per RFC 8259:
+     * backslash, double-quote, newline, carriage-return, tab.
+     * Other Unicode control characters (U+0000–U+001F) are not valid
+     * in notification title/body text, so manual escaping is sufficient.
+     */
+    private fun jsonValue(value: String): String {
+        val escaped = value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        return "\"$escaped\""
+    }
+
+    /**
+     * Build a minimal JSON object string from key-value pairs.
+     * Each value must already be JSON-escaped and quoted.
+     * Note: uses manual string concatenation rather than a full JSON library
+     * because the frame payloads are tiny (3–5 fields) and the protocol is
+     * deliberately simple — introducing a library would add runtime overhead
+     * without meaningful benefit.
+     */
+    private fun buildJson(vararg fields: Pair<String, String>): String {
+        return fields.joinToString(",", "{", "}") { (key, value) ->
+            "\"$key\":$value"
+        }
     }
 }

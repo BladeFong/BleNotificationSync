@@ -130,6 +130,16 @@ listen('show-window', () => {
 
 // ── 设备列表 ──
 
+async function removeDevice(deviceId, deviceName) {
+    try {
+        await invoke('remove_paired_device', { deviceId });
+        addLog(`${isChinese ? '已移除设备' : 'Device removed'}: ${deviceName}`);
+        refreshDeviceList();
+    } catch (e) {
+        addLog(`${isChinese ? '移除失败' : 'Failed to remove'}: ${e}`);
+    }
+}
+
 async function refreshDeviceList() {
     try {
         const devices = await invoke('get_paired_devices');
@@ -143,10 +153,19 @@ async function refreshDeviceList() {
         }
         deviceList.innerHTML = devices.map(d =>
             `<div class="device-item">
-                <span class="device-name">${d.device_name}</span>
-                <span class="device-pkg">${d.package_name}</span>
+                <span class="device-name" title="${d.device_name}">${d.device_name}</span>
+                <span class="device-pkg" title="${d.package_name}">${d.package_name}</span>
+                <button class="device-remove-btn" data-id="${d.device_id}" data-name="${d.device_name}" title="${isChinese ? '移除设备' : 'Remove Device'}">×</button>
             </div>`
         ).join('');
+
+        deviceList.querySelectorAll('.device-remove-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const deviceId = e.currentTarget.getAttribute('data-id');
+                const deviceName = e.currentTarget.getAttribute('data-name');
+                removeDevice(deviceId, deviceName);
+            });
+        });
     } catch (e) {
         // ignore
     }

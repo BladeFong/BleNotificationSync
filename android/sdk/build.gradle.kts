@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("maven-publish")
 }
 
 
@@ -90,6 +91,21 @@ dependencies {
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("androidx.test.ext:junit:1.2.1")
     testImplementation("org.robolectric:robolectric:4.14.1")
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            register<MavenPublication>("release") {
+                groupId = "com.github.BladeFong.BleNotificationSync"
+                artifactId = "sdk"
+
+                afterEvaluate {
+                    from(components["release"])
+                }
+            }
+        }
+    }
 }
 
 

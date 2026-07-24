@@ -22,21 +22,23 @@ class DemoAlarmReceiver : BroadcastReceiver() {
         val title = intent.getStringExtra(EXTRA_TITLE) ?: "Demo Reminder"
         val body = intent.getStringExtra(EXTRA_BODY) ?: ""
 
-        Log.d("DemoAlarmReceiver", "闹钟触发，准备通过 SDK 发送通知: title=$title, body=$body")
+        if (Log.isLoggable("DemoAlarmReceiver", Log.DEBUG)) {
+            Log.d("DemoAlarmReceiver", "Alarm triggered, sending notification via SDK: title=$title, body=$body")
+        }
 
         try {
             val sdk = BleNotificationSDK.init(context.applicationContext)
             sdk.sendNotification(title, body, callback = object : SendCallback {
                 override fun onSuccess() {
-                    Log.d("DemoAlarmReceiver", "同步成功")
+                    Log.d("DemoAlarmReceiver", "Notification sent successfully")
                 }
 
                 override fun onError(error: SdkError) {
-                    Log.e("DemoAlarmReceiver", "同步失败: ${error.message}")
+                    Log.e("DemoAlarmReceiver", "Notification send failed: ${error.message}")
                 }
             })
         } catch (e: Exception) {
-            Log.e("DemoAlarmReceiver", "SDK 初始化或调用失败", e)
+            Log.e("DemoAlarmReceiver", "SDK init or call failed", e)
         }
     }
 }

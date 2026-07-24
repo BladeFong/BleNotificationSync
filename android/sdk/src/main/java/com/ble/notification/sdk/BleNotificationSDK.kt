@@ -139,7 +139,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
     fun getDeviceManagerFragment(): Fragment = navigator.getDeviceManagerFragment()
 
-    fun openDeviceManager(context: Context) {
+    fun openDeviceManager() {
         navigator.openDeviceManager()
     }
 

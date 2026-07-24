@@ -40,6 +40,7 @@ class QrScanner(
         isScanning = false
         cameraProvider?.unbindAll()
         cameraProvider = null
+        analysisExecutor.shutdownNow()
     }
 
     private fun bindCamera(provider: ProcessCameraProvider, previewView: PreviewView) {

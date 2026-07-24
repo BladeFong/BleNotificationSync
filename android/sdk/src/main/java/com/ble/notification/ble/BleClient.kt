@@ -151,7 +151,6 @@ class BleClient(private val context: Context) {
         val device = bluetoothAdapter.getRemoteDevice(mac)
         if (device == null) { callback.onError(SdkError.DeviceNotFound(mac)); return }
 
-        servicesDone = false; mtuDone = false; readyCalled = false
         android.util.Log.d("BleClient", "connectGatt to target device")
 
         gattRef = device.connectGatt(context, false, object : BluetoothGattCallback() {
@@ -180,6 +179,7 @@ class BleClient(private val context: Context) {
             override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
                 android.util.Log.d("BleClient", "MTU: status=$status mtu=$mtu")
                 if (status == BluetoothGatt.GATT_SUCCESS) { mtuDone = true; tryReady(gatt, callback) }
+                else { callback.onError(SdkError.ConnectionFailed("mtu:$status")); try { gatt.close() } catch (_: Exception) {} }
             }
             override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
                 android.util.Log.d("BleClient", "onCharacteristicWrite: status=$status. Initiating disconnect.")

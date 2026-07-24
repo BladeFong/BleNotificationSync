@@ -3,4 +3,7 @@
     <dimen name="text_size_title">22sp</dimen>
     <dimen name="text_size_body">18sp</dimen>
     <dimen name="text_size_caption">16sp</dimen>
+
+    <!-- Log text view font size -->
+    <dimen name="text_size_log">12sp</dimen>
 </resources>

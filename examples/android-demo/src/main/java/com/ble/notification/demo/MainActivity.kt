@@ -217,18 +217,18 @@ class MainActivity : AppCompatActivity() {
         val bluetoothManager = getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
         val bluetoothAdapter = bluetoothManager?.adapter ?: @Suppress("DEPRECATION") android.bluetooth.BluetoothAdapter.getDefaultAdapter()
         if (bluetoothAdapter == null) {
-            android.util.Log.e("BleClient", "Activity: 蓝牙不可用")
+            android.util.Log.e("BleDemo", "Activity: Bluetooth not available")
             return
         }
         if (!bluetoothAdapter.isEnabled) {
-            android.util.Log.e("BleClient", "Activity: 蓝牙未开启")
+            android.util.Log.e("BleDemo", "Activity: Bluetooth not enabled")
             return
         }
 
         val scanner = bluetoothAdapter.bluetoothLeScanner
-        android.util.Log.d("BleClient", "Activity: scanner=$scanner")
+        android.util.Log.d("BleDemo", "Activity: scanner=$scanner")
         if (scanner == null) {
-            android.util.Log.e("BleClient", "Activity: Scanner 不可用")
+            android.util.Log.e("BleDemo", "Activity: Scanner not available")
             return
         }
 
@@ -240,17 +240,17 @@ class MainActivity : AppCompatActivity() {
         val callback = object : android.bluetooth.le.ScanCallback() {
             override fun onScanResult(callbackType: Int, result: android.bluetooth.le.ScanResult) {
                 count++
-                android.util.Log.d("BleClient", "Activity Scan hit #${count}: name=${result.device.name} rssi=${result.rssi}")
+                android.util.Log.d("BleDemo", "Activity Scan hit #${count}: name=${result.device.name} rssi=${result.rssi}")
             }
             override fun onBatchScanResults(results: MutableList<android.bluetooth.le.ScanResult>?) {
-                android.util.Log.d("BleClient", "Activity onBatchScanResults: ${results?.size ?: 0} results")
+                android.util.Log.d("BleDemo", "Activity onBatchScanResults: ${results?.size ?: 0} results")
             }
             override fun onScanFailed(errorCode: Int) {
-                android.util.Log.e("BleClient", "Activity Scan failed: errorCode=$errorCode")
+                android.util.Log.e("BleDemo", "Activity Scan failed: errorCode=$errorCode")
             }
         }
 
-        android.util.Log.d("BleClient", "Activity: 开始前台扫描 (10秒)...")
+        android.util.Log.d("BleDemo", "Activity: Start foreground scan (10s)...")
         btnScanOnly.isEnabled = false
         scanner.startScan(null, settings, callback)
 
@@ -261,7 +261,7 @@ class MainActivity : AppCompatActivity() {
                 if (!isFinishing && !isDestroyed) {
                     btnScanOnly.isEnabled = true
                 }
-                android.util.Log.d("BleClient", "Activity: 扫描结束，共扫到 $count 个设备")
+                android.util.Log.d("BleDemo", "Activity: Scan finished, found $count devices")
             }, 10_000)
         }
     }

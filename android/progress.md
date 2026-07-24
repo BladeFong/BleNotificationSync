@@ -1,5 +1,19 @@
 # Android SDK — 进度日志
 
+## 2026-07-24 — 审查报告核实与修复（14 项闭环）
+
+- 审查子代理产出 `docs/code-review-20260724.md`（SDK 9 + Demo 5，共 14 项）
+- 主代理逐条核实代码：**1 项误判**（#1 GATT 断开时序，实际异步可调通），**5 项驳回**（风险极低或过度防御），**8 项属实修复**
+- 修复项：QrScanner 线程泄漏、MTU 失败回调、openDeviceManager 去参、PAIRED 注释、重复重置删除、安全强转、Demo 日志英文化+isLoggable、dimens 补 text_size_log
+- 审查子代理审核通过，全部闭环
+
+## 2026-07-24 — 代码审查报告更新（SDK + Demo）
+
+- 完成对 SDK 模块和 Demo 模块的全面代码审查
+- SDK 报告（`docs/code-review-sdk.md`）：发现 16 项问题（1 Blocking / 6 Important / 4 Nit / 4 Suggestion），覆盖 build 配置、BLE 连接、安全性、测试覆盖、API 设计
+- Demo 报告（`docs/code-review-demo.md`）：发现 10 项问题（4 Important / 3 Nit / 3 Suggestion），覆盖日志国际化、布局、配置、代码质量
+- 详细问题列表见对应审查报告文件
+
 ## 2026-07-24 — 审查报告逐条核实、架构解耦重构与全面合规整治（三回合）
 
 ### 第一回合：架构解耦 + i18n 补齐

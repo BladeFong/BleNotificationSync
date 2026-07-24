@@ -2,6 +2,8 @@
 
 ## 2026-07-24 — 支持 NDK C++ 子模块 JitPack 构建与 Release 编译修补
 
+- 补齐 Demo Release 替换与签名对齐：为了进行混淆保护验证，修改了 `demo` 模块的 `build.gradle.kts` 将 `release` 构建类型的签名显式指向为 `debug` 证书，支持不清除应用数据覆盖替换 Debug 版本。同时修补了 `MainActivity.kt` 里面 `openDeviceManager` 的无参调用适配。
+- 补齐 SDK 混淆保护：将依赖的 ML Kit 与 CameraX 库的 ProGuard/R8 混淆忽略与保持规则合入到 `sdk/consumer-rules.pro` 中，以便集成的宿主 App 进行 Release 构建时能够自动继承分发，规避了由于反射及内联等优化引发的初始化空指针崩溃。
 - 支持 NDK C++ 模块的 JitPack 构建：在 `jitpack.yml` 中添加了 `git submodule update --init --recursive` 自动拉取 `libtomcrypt` 子模块。由于项目根目录没有 `gradlew`，自定义了 `install` 阶段命令在 `android/` 子目录下执行 `publishToMavenLocal` 进行编译和构建。
 - 修复 Release 编译缺陷：补齐了 `PairingManager.kt` 里的 `PairingState.PAIRED` 状态分支，使 `when` 表达式穷尽，从而顺利通过 Release 模式下的严格 Kotlin 编译（避免了 Warning 升级为 Error 导致构建失败）。
 

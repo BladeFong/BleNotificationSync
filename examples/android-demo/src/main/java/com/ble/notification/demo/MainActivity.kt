@@ -60,7 +60,7 @@ class MainActivity : AppCompatActivity() {
         btnScanOnly = findViewById(R.id.btn_scan_only)
 
         btnDeviceManager.setOnClickListener {
-            sdk.openDeviceManager(this)
+            sdk.openDeviceManager()
         }
 
         btnSend.setOnClickListener { doSendReminder() }

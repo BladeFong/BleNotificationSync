@@ -81,7 +81,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
     fun openDeviceManager(context: Context)
 
     /** 发送加密通知到首个在场已绑定 PC */
-    fun sendNotification(title: String, body: String, callback: SendCallback? = null)
+    fun sendNotification(title: String, body: String, notificationId: Int? = null, callback: SendCallback? = null)
 }
 ```
 

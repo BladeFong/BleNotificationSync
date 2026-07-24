@@ -432,12 +432,14 @@ class BleNotificationSDK {
         title: String,
         body: String,
         actions: List<NotificationAction> = emptyList(),
+        notificationId: Int? = null,
         callback: SendCallback? = null
     )
 
     // 发送内建通知（直接接收 NotificationCompat.Builder，弹出本地通知并在后台通过 BleForegroundService 同步至 PC）
     fun sendNotification(
         builder: NotificationCompat.Builder,
+        notificationId: Int? = null,
         callback: SendCallback? = null
     )
 }

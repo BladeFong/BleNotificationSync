@@ -186,11 +186,19 @@ class BleNotificationSDK private constructor(private val context: Context) {
             builder.addAction(0, action.label, pendingIntent)
         }
 
-        sendNotification(builder, callback)
+        sendNotification(builder, null, callback)
     }
 
+    /**
+     * 发送通知并通过 BLE 同步到已配对设备。
+     *
+     * @param builder 已构建好的 [NotificationCompat.Builder]
+     * @param notificationId 本地通知 ID，为 null 时根据 title+body 哈希自动生成
+     * @param callback 发送结果回调
+     */
     fun sendNotification(
         builder: androidx.core.app.NotificationCompat.Builder,
+        notificationId: Int? = null,
         callback: SendCallback? = null
     ) {
         if (checkClosed(callback)) return
@@ -199,9 +207,9 @@ class BleNotificationSDK private constructor(private val context: Context) {
         val body = notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString() ?: ""
 
         // 1. 弹出本地通知
-        val notificationId = 0x4000_0000 + (title.hashCode() xor body.hashCode())
+        val id = notificationId ?: (0x4000_0000 + (title.hashCode() xor body.hashCode()))
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        nm.notify(notificationId, notification)
+        nm.notify(id, notification)
 
         // 2. 检查是否有配对的设备
         val devices = pairingManager.getPairedDevices()

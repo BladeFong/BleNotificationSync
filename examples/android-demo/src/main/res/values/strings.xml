@@ -17,6 +17,15 @@
     <string name="s_need_alarm_permission">Exact alarm permission required, opening settings…</string>
     <string name="s_need_notification_permission">Notification permission required for background sync</string>
     <string name="s_cannot_open_alarm_settings">Cannot open settings automatically, please enable exact alarm permission manually.</string>
-
+    <string name="s_log_start_pairing">Starting scan to pair…</string>
+    <string name="s_log_connecting_device">Connecting to device…</string>
+    <string name="s_log_gatt_connecting">GATT connecting…</string>
+    <string name="s_log_registering">Registering…</string>
+    <string name="s_log_paired_success">Paired successfully!</string>
+    <string name="s_log_setting_alarm">Setting alarm: %1$s</string>
+    <string name="s_log_alarm_set">Alarm set, triggers in 10s, exiting app</string>
+    <string name="s_log_binding_status_update">Device binding status updated: %1$d paired</string>
+    <string name="s_toast_already_paired">This device is already paired</string>
+    <string name="s_toast_pair_failed">Failed: %1$s</string>
 </resources>
 

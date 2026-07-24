@@ -15,11 +15,19 @@ android {
 
         ndk {
             abiFilters.add("arm64-v8a")
-            abiFilters.add("x86_64")
         }
     }
 
-
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8

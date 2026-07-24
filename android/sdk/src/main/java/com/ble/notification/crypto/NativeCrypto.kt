@@ -44,7 +44,15 @@ object NativeCrypto {
     @JvmStatic
     external fun hkdfSha256(salt: ByteArray, ikm: ByteArray, length: Int): ByteArray?
 
-    /** Default salt for BLE notification sync key derivation. */
+    /**
+     * Default salt for BLE notification sync key derivation.
+     *
+     * **Security note:** This salt is embedded in the APK and shared across all installs,
+     * which weakens HKDF's resistance to rainbow-table attacks. An ideal salt would be
+     * unique per pairing session and exchanged during the QR handshake. Changing this
+     * value would break compatibility with all existing paired devices. A protocol
+     * upgrade (e.g. per-session salt in REGISTER frame) should be considered for v2.
+     */
     val SALT: ByteArray = "BleNotificationSync".toByteArray(Charsets.UTF_8)
 
     /**

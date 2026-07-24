@@ -50,7 +50,7 @@ class QrScannerFragment : Fragment() {
 
         val hint = TextView(context).apply {
             text = getString(R.string.s_qr_scan_hint)
-            setTextColor(0xFFFFFFFF.toInt())
+            setTextColor(android.graphics.Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.text_size_caption))
             setShadowLayer(4f, 0f, 0f, 0xFF000000.toInt())
             layoutParams = FrameLayout.LayoutParams(

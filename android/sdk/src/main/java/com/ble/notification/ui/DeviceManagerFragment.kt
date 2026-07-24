@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -37,6 +38,11 @@ import com.ble.notification.sdk.BleNotificationSDK
 import com.ble.notification.sdk.R
 import com.ble.notification.sdk.SdkError
 
+// Compose typography constants (CLAUDE.md: text_size_title=22sp, body=18sp, caption=16sp)
+private val TextSizeTitle = 22.sp
+private val TextSizeBody = 18.sp
+private val TextSizeCaption = 16.sp
+
 class DeviceManagerFragment : Fragment() {
 
     override fun onCreateView(
@@ -50,14 +56,18 @@ class DeviceManagerFragment : Fragment() {
         return ComposeView(context).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                MaterialTheme(
-                    colors = lightColors(
+                val colors = if (isSystemInDarkTheme()) {
+                    darkColors(
                         primary = primaryColor,
-                        secondary = primaryColor,
-                        background = Color(0xFFF5F5F7),
-                        surface = Color.White
+                        secondary = primaryColor
                     )
-                ) {
+                } else {
+                    lightColors(
+                        primary = primaryColor,
+                        secondary = primaryColor
+                    )
+                }
+                MaterialTheme(colors = colors) {
                     DeviceManagerScreen(
                         onBackClick = {
                             activity?.onBackPressedDispatcher?.onBackPressed()
@@ -217,12 +227,12 @@ fun DeviceManagerScreen(
                         deviceToUnpair = null
                     }
                 ) {
-                    Text(stringResource(R.string.s_unpair), color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.s_unpair), color = MaterialTheme.colors.error, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deviceToUnpair = null }) {
-                    Text(stringResource(R.string.s_cancel), color = Color.Gray)
+                    Text(stringResource(R.string.s_cancel), color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
                 }
             }
         )
@@ -252,7 +262,7 @@ fun DeviceCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp)),
+            .border(1.dp, MaterialTheme.colors.onSurface.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
         shape = RoundedCornerShape(8.dp),
         backgroundColor = MaterialTheme.colors.surface,
         elevation = 2.dp
@@ -278,14 +288,14 @@ fun DeviceCard(
                 Column {
                     Text(
                         text = device.name,
-                        fontSize = 16.sp,
+                        fontSize = TextSizeCaption,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF212121)
+                        color = MaterialTheme.colors.onSurface
                     )
                     Text(
                         text = stringResource(R.string.s_paired),
                         fontSize = 12.sp,
-                        color = Color(0xFF757575)
+                        color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -293,7 +303,7 @@ fun DeviceCard(
             OutlinedButton(
                 onClick = onUnpairClick,
                 shape = RoundedCornerShape(4.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFD32F2F)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colors.error),
                 modifier = Modifier.height(36.dp)
             ) {
                 Text(stringResource(R.string.s_unpair), fontSize = 13.sp)
@@ -313,12 +323,12 @@ fun EmptyStateView() {
             imageVector = Icons.Default.Computer,
             contentDescription = null,
             modifier = Modifier.size(64.dp),
-            tint = Color.LightGray
+            tint = MaterialTheme.colors.onSurface.copy(alpha = 0.3f)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = stringResource(R.string.s_no_paired_devices),
-            fontSize = 16.sp,
+            fontSize = TextSizeCaption,
             color = MaterialTheme.colors.onBackground,
             fontWeight = FontWeight.Medium
         )
@@ -347,7 +357,7 @@ fun BottomBarContent(onAddDeviceClick: () -> Unit) {
             Text(
                 text = stringResource(R.string.s_bottom_scan_hint),
                 fontSize = 12.sp,
-                color = Color.Gray,
+                color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -371,7 +381,7 @@ fun BottomBarContent(onAddDeviceClick: () -> Unit) {
                 ) {
                     Icon(
                         imageVector = Icons.Default.QrCodeScanner,
-                        contentDescription = "Scan",
+                        contentDescription = stringResource(R.string.s_scan_to_bind_new_device),
                         tint = MaterialTheme.colors.onPrimary,
                         modifier = Modifier.size(20.dp)
                     )

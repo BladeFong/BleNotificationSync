@@ -1,25 +1,16 @@
 package com.ble.notification.sdk
 
-import android.bluetooth.BluetoothGatt
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.ActivityCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
-import com.ble.notification.ble.BleClient
-import com.ble.notification.ble.ConnectionCallback
 import com.ble.notification.pairing.PairedDevice
 import com.ble.notification.pairing.PairingCallback
 import com.ble.notification.pairing.PairingManager
-import com.ble.notification.protocol.FrameEncoder
-import com.ble.notification.qr.QrScannerFragment
-import com.ble.notification.ui.DeviceManagerActivity
-import com.ble.notification.ui.DeviceManagerFragment
 import kotlinx.coroutines.flow.StateFlow
 
 interface SendCallback {
@@ -27,33 +18,32 @@ interface SendCallback {
     fun onError(error: SdkError)
 }
 
-interface ReminderCallback {
-    fun onScheduled(taskId: String)
-    fun onTriggered(taskId: String)
-    fun onSynced(taskId: String, success: Boolean)
-}
+data class NotificationAction(
+    val label: String,
+    val actionId: String
+)
 
 class BleNotificationSDK private constructor(private val context: Context) {
 
     private val pairingManager = PairingManager(context)
+    private val permissionHelper = PermissionHelper(context)
+    private val navigator = Navigator(context)
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val reminderCallbacks = mutableMapOf<String, ReminderCallback>()
+    private val sendCallbacks = mutableMapOf<String, SendCallback>()
     @Volatile private var closed = false
-
-    // 两段式位置权限 Launcher
-    private var foregroundLocationLauncher: ActivityResultLauncher<String>? = null
-    private var backgroundLocationLauncher: ActivityResultLauncher<String>? = null
 
     val pairedDevicesState: StateFlow<List<PairedDevice>> = pairingManager.pairedDevicesFlow
 
     companion object {
+        const val CHANNEL_ID = "ble_notify_reminders"
+
         @Volatile
         private var instance: BleNotificationSDK? = null
 
         fun init(context: Context): BleNotificationSDK {
             return instance ?: synchronized(this) {
                 instance ?: BleNotificationSDK(context.applicationContext).also { instance = it }
-                    .also { AlarmReceiver.createNotificationChannel(context.applicationContext) }
+                    .also { createNotificationChannel(context.applicationContext) }
             }
         }
 
@@ -62,66 +52,31 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 "BleNotificationSDK not initialized. Call init(context) first."
             )
         }
+
+        fun createNotificationChannel(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val channel = android.app.NotificationChannel(
+                CHANNEL_ID,
+                context.getString(R.string.s_notification_channel_name),
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply { description = context.getString(R.string.s_notification_channel_desc) }
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            nm.createNotificationChannel(channel)
+        }
     }
 
     /**
      * 注册位置权限 Launcher。**必须在 Activity.onCreate() 中调用。**
      */
     fun registerPermissionLaunchers(activity: FragmentActivity) {
-        foregroundLocationLauncher = activity.registerForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { granted ->
-            if (granted) requestBackgroundLocation()
-        }
-
-        backgroundLocationLauncher = activity.registerForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { granted ->
-            android.util.Log.d("BleSDK", "后台位置权限回调: granted=$granted")
-        }
+        permissionHelper.registerLaunchers(activity)
     }
 
     /**
      * 统一检查 SDK 所需的所有权限。**在 Activity.onResume() 中调用。**
      */
     fun ensurePermissions(activity: FragmentActivity) {
-        // 1. BLE 权限
-        val missingBle = BleClient.getMissingPermissions(context)
-        if (missingBle.isNotEmpty()) {
-            ActivityCompat.requestPermissions(activity, missingBle, 0x7100_0001)
-            return
-        }
-
-        // 2. 位置权限（Android 10+）
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
-        if (foregroundLocationLauncher == null) return
-
-        val bgGranted = ActivityCompat.checkSelfPermission(
-            activity, android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (bgGranted) return
-
-        val fineGranted = ActivityCompat.checkSelfPermission(
-            activity, android.Manifest.permission.ACCESS_FINE_LOCATION
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (!fineGranted) {
-            foregroundLocationLauncher?.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
-            return
-        }
-
-        requestBackgroundLocation()
-    }
-
-    private fun requestBackgroundLocation() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
-        if (backgroundLocationLauncher == null) return
-
-        val bgGranted = ActivityCompat.checkSelfPermission(
-            context, android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (bgGranted) return
-
-        backgroundLocationLauncher?.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        permissionHelper.ensurePermissions(activity)
     }
 
     // ── 配对流程 ──
@@ -152,18 +107,14 @@ class BleNotificationSDK private constructor(private val context: Context) {
     fun startPairing(activity: FragmentActivity, appName: String, callback: PairingCallback) {
         if (checkClosed(callback)) return
 
-        val fragment = QrScannerFragment.newInstance { qrResult ->
+        navigator.showQrScanner(activity) { qrResult ->
             if (qrResult == null) {
                 callback.onError(SdkError.Unknown("QR scan cancelled or failed"))
-                return@newInstance
+                return@showQrScanner
             }
 
             startPairingDirectly(activity, qrResult, callback)
         }
-
-        activity.supportFragmentManager.beginTransaction()
-            .replace(android.R.id.content, fragment)
-            .commit()
     }
 
 
@@ -186,13 +137,10 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
     // ── UI 入口 ──
 
-    fun getDeviceManagerFragment(): Fragment = DeviceManagerFragment()
+    fun getDeviceManagerFragment(): Fragment = navigator.getDeviceManagerFragment()
 
     fun openDeviceManager(context: Context) {
-        val intent = Intent(context, DeviceManagerActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
+        navigator.openDeviceManager()
     }
 
     // ── 通知发送 ──
@@ -204,88 +152,92 @@ class BleNotificationSDK private constructor(private val context: Context) {
         return pm.getApplicationLabel(ai).toString()
     }
 
-    fun sendNotification(title: String, body: String, callback: SendCallback? = null) {
+    fun sendNotification(
+        title: String,
+        body: String,
+        actions: List<NotificationAction> = emptyList(),
+        callback: SendCallback? = null
+    ) {
         if (checkClosed(callback)) return
         val finalTitle = title.ifBlank { getAppName() }
+
+        val builder = androidx.core.app.NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(finalTitle)
+            .setContentText(body)
+            .setAutoCancel(true)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+
+        actions.forEachIndexed { index, action ->
+            val intent = Intent("com.ble.notification.ACTION_NOTIFICATION_CLICK").apply {
+                `package` = context.packageName
+                putExtra("action_id", action.actionId)
+                putExtra("title", finalTitle)
+                putExtra("body", body)
+            }
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                0x7000_0000 + action.actionId.hashCode() + index,
+                intent,
+                flags
+            )
+            builder.addAction(0, action.label, pendingIntent)
+        }
+
+        sendNotification(builder, callback)
+    }
+
+    fun sendNotification(
+        builder: androidx.core.app.NotificationCompat.Builder,
+        callback: SendCallback? = null
+    ) {
+        if (checkClosed(callback)) return
+        val notification = builder.build()
+        val title = notification.extras.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString() ?: getAppName()
+        val body = notification.extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString() ?: ""
+
+        // 1. 弹出本地通知
+        val notificationId = 0x4000_0000 + (title.hashCode() xor body.hashCode())
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        nm.notify(notificationId, notification)
+
+        // 2. 检查是否有配对的设备
         val devices = pairingManager.getPairedDevices()
         if (devices.isEmpty()) {
             callback?.onError(SdkError.NotPaired())
             return
         }
 
-        val targetDevice = devices.first()
-        val baseKey = pairingManager.getBaseKey(targetDevice.uuid)
-            ?: run {
-                callback?.onError(SdkError.NotPaired())
-                return
-            }
-
-        BleClient.connectWithScan(context, object : ConnectionCallback {
-            override fun onReady(gatt: BluetoothGatt) {
-                val frame = FrameEncoder.encodeNotify(
-                    key = baseKey,
-                    packageName = context.packageName,
-                    title = finalTitle,
-                    body = body,
-                    timestamp = System.currentTimeMillis()
-                )
-
-                val service = gatt.getService(BleClient.SERVICE_UUID)
-                val characteristic = service?.getCharacteristic(BleClient.WRITE_CHARACTERISTIC_UUID)
-
-                if (characteristic == null) {
-                    callback?.onError(SdkError.ServiceNotFound())
-                    gatt.disconnect()
-                    gatt.close()
-                    return
-                }
-
-                val writeOk = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, frame)
-                if (writeOk) {
-                    callback?.onSuccess()
-                } else {
-                    callback?.onError(SdkError.Unknown("Gatt write failed"))
-                }
-
-                mainHandler.postDelayed({
-
-                    gatt.disconnect()
-                    gatt.close()
-                }, 3000)
-            }
-
-            override fun onError(error: SdkError) {
-                callback?.onError(error)
-            }
-        })
-    }
-
-    // ── 闹钟 ──
-
-    fun setReminder(
-        taskId: String,
-        title: String,
-        body: String,
-        triggerAt: Long,
-        callback: ReminderCallback? = null
-    ) {
-        if (closed) return
+        // 3. 开启前台服务进行蓝牙同步发送
+        val sendId = java.util.UUID.randomUUID().toString()
         if (callback != null) {
-            reminderCallbacks[taskId] = callback
+            sendCallbacks[sendId] = callback
         }
-        ReminderScheduler.schedule(context, taskId, title, body, triggerAt)
-        callback?.onScheduled(taskId)
+
+        val intent = Intent(context, BleForegroundService::class.java).apply {
+            putExtra(BleForegroundService.EXTRA_TITLE, title)
+            putExtra(BleForegroundService.EXTRA_BODY, body)
+            putExtra(BleForegroundService.EXTRA_SEND_ID, sendId)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
     }
 
-    fun cancelReminder(taskId: String) {
-        ReminderScheduler.cancel(context, taskId)
-        reminderCallbacks.remove(taskId)
-    }
-
-    internal fun notifySynced(taskId: String, success: Boolean) {
-        val callback = reminderCallbacks.remove(taskId)
-        callback?.onTriggered(taskId)
-        callback?.onSynced(taskId, success)
+    internal fun notifySendResult(sendId: String, success: Boolean, error: SdkError? = null) {
+        mainHandler.post {
+            val callback = sendCallbacks.remove(sendId)
+            if (success) {
+                callback?.onSuccess()
+            } else {
+                callback?.onError(error ?: SdkError.Unknown("Send failed"))
+            }
+        }
     }
 
     // ── 生命周期 ──

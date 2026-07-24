@@ -274,7 +274,7 @@ flowchart LR
 | 层 | 职责 |
 |----|------|
 | 业务层 | 调用 SDK API |
-| SDK 封装层 | setReminder / cancelReminder / sendNotification / startPairing |
+| SDK 封装层 | sendNotification / startPairing |
 | BLE 通信层 | MTU 协商、分片组包、串行队列、连接管理 |
 
 ### 3.3 PC/Mac 端分层
@@ -423,51 +423,33 @@ interface PairingCallback {
 }
 ```
 
-### 5.2 闹钟 + 通知 API
+### 5.2 通知弹出与同步 API
 
 ```kotlin
 class BleNotificationSDK {
-    // 设置闹钟（闹钟触发时同时发本地通知 + 蓝牙推送）
-    fun setReminder(
-        taskId: String,
-        title: String,
-        body: String,
-        triggerAt: Long,
-        actions: List<ReminderAction> = emptyList(),
-        callback: ReminderCallback? = null
-    )
-
-    // 取消闹钟
-    fun cancelReminder(taskId: String)
-}
-
-data class ReminderAction(
-    val label: String,
-    val actionId: String
-)
-
-interface ReminderCallback {
-    fun onScheduled(id: String)
-    fun onTriggered(id: String)
-    fun onSynced(id: String, success: Boolean)
-}
-```
-
-### 5.3 直接发送 API
-
-```kotlin
-class BleNotificationSDK {
-    // 直接发送通知（不走闹钟）
+    // 发送内建通知（支持配置通知按钮，弹出本地通知并在后台通过 BleForegroundService 同步至 PC）
     fun sendNotification(
         title: String,
         body: String,
+        actions: List<NotificationAction> = emptyList(),
+        callback: SendCallback? = null
+    )
+
+    // 发送内建通知（直接接收 NotificationCompat.Builder，弹出本地通知并在后台通过 BleForegroundService 同步至 PC）
+    fun sendNotification(
+        builder: NotificationCompat.Builder,
         callback: SendCallback? = null
     )
 }
 
+data class NotificationAction(
+    val label: String,
+    val actionId: String
+)
+
 interface SendCallback {
     fun onSuccess()
-    fun onError(error: SendError)
+    fun onError(error: SdkError)
 }
 ```
 
@@ -479,14 +461,14 @@ interface SendCallback {
 
 ```mermaid
 flowchart TD
-    A[闹钟触发] --> B[启动 BleForegroundService]
-    B --> C[BLE 扫描 + 连接 GATT Server]
-    C --> D{连接成功?}
-    D -->|失败| E[只发本地通知]
-    D -->|成功| F[发送 NOTIFY]
-    F --> G[3 秒后断开连接]
-    G --> H[回调 onSynced success=true]
-    E --> I[回调 onSynced success=false]
+    A[调用 sendNotification] --> B[弹出本地通知]
+    B --> C[启动 BleForegroundService]
+    C --> D[BLE 扫描 + 连接 GATT Server]
+    D --> E{连接成功?}
+    E -->|失败| F[不进行蓝牙发送，回调 onError]
+    E -->|成功| G[发送 NOTIFY]
+    G --> H[3 秒后断开连接]
+    H --> I[回调 SendCallback onSuccess]
 ```
 
 ### 6.2 连接策略

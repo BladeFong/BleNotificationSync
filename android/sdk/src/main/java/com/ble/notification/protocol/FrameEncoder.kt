@@ -1,6 +1,7 @@
 package com.ble.notification.protocol
 
 import com.ble.notification.crypto.AesGcmCrypto
+import org.json.JSONObject
 
 /**
  * Encodes BLE notification frames according to the protocol spec.
@@ -31,19 +32,14 @@ object FrameEncoder {
         deviceName: String? = null
     ): ByteArray {
         val randomHex = random.joinToString("") { "%02x".format(it) }
-        val fields = mutableListOf<Pair<String, String>>(
-            "app_name" to jsonString(appName),
-            "package" to jsonString(packageName),
-            "random" to jsonString(randomHex)
-        )
-        if (!androidId.isNullOrBlank()) {
-            fields.add("android_id" to jsonString(androidId))
+        val json = JSONObject().apply {
+            put("app_name", appName)
+            put("package", packageName)
+            put("random", randomHex)
+            if (!androidId.isNullOrBlank()) put("android_id", androidId)
+            if (!deviceName.isNullOrBlank()) put("device_name", deviceName)
         }
-        if (!deviceName.isNullOrBlank()) {
-            fields.add("device_name" to jsonString(deviceName))
-        }
-        val json = buildJson(*fields.toTypedArray())
-        return buildFrame(MessageType.REGISTER, 0, 1, json.toByteArray(Charsets.UTF_8))
+        return buildFrame(MessageType.REGISTER, 0, 1, json.toString().toByteArray(Charsets.UTF_8))
     }
 
 
@@ -66,11 +62,11 @@ object FrameEncoder {
         body: String,
         timestamp: Long
     ): ByteArray {
-        val plaintext = buildJson(
-            "title" to jsonString(title),
-            "body" to jsonString(body),
-            "timestamp" to timestamp.toString()
-        )
+        val plaintext = JSONObject().apply {
+            put("title", title)
+            put("body", body)
+            put("timestamp", timestamp)
+        }.toString()
         val encrypted = AesGcmCrypto.encrypt(
             key,
             plaintext.toByteArray(Charsets.UTF_8)
@@ -118,7 +114,7 @@ object FrameEncoder {
      * @return encoded frame bytes
      */
     fun encodeIconEnd(totalSize: Int): ByteArray {
-        val json = buildJson("total_size" to totalSize.toString())
+        val json = JSONObject().apply { put("total_size", totalSize) }.toString()
         return buildFrame(MessageType.ICON_END, 0, 1, json.toByteArray(Charsets.UTF_8))
     }
 
@@ -140,22 +136,5 @@ object FrameEncoder {
         payload.copyInto(frame, offset)
 
         return frame
-    }
-
-    private fun jsonString(value: String): String {
-        val escaped = value
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-        return "\"$escaped\""
-    }
-
-
-    private fun buildJson(vararg fields: Pair<String, String>): String {
-        return fields.joinToString(",", "{", "}") { (key, value) ->
-            "\"$key\":$value"
-        }
     }
 }

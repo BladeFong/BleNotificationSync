@@ -13,7 +13,6 @@ import androidx.core.view.WindowInsetsCompat
 import com.ble.notification.pairing.PairingCallback
 import com.ble.notification.sdk.BleNotificationSDK
 import com.ble.notification.sdk.LogRepository
-import com.ble.notification.sdk.ReminderCallback
 import com.ble.notification.sdk.SdkError
 
 class MainActivity : AppCompatActivity() {
@@ -119,31 +118,38 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun startPairing() {
-        log("开始扫描绑定…")
+        log(getString(R.string.s_log_start_pairing))
         sdk.startPairing(this, getString(R.string.s_app_display_name), object : PairingCallback {
             override fun onScanSuccess() {
                 // logged in onQrResult above
             }
             override fun onQrResult(mac: String, uuid: String) {
-                log("QR: mac=$mac uuid=$uuid")
-                log("连接 $mac …")
+                if (android.util.Log.isLoggable("BleDemo", android.util.Log.DEBUG)) {
+                    log("QR: uuid=$uuid")
+                }
+                log(getString(R.string.s_log_connecting_device))
             }
             override fun onConnecting() {
-                log("GATT 连接中…")
+                log(getString(R.string.s_log_gatt_connecting))
             }
             override fun onRegistering() {
-                log("正在注册…")
+                log(getString(R.string.s_log_registering))
             }
             override fun onPaired() {
-                log("绑定成功！")
+                val pairedMsg = getString(R.string.s_log_paired_success)
+                log(pairedMsg)
                 runOnUiThread {
-                    Toast.makeText(this@MainActivity, "绑定成功！", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, pairedMsg, Toast.LENGTH_SHORT).show()
                     updateButtonStates()
                 }
             }
 
             override fun onError(error: SdkError) {
-                val msg = if (error is SdkError.AlreadyPaired) "该设备已绑定" else "失败: ${error.message}"
+                val msg = if (error is SdkError.AlreadyPaired) {
+                    getString(R.string.s_toast_already_paired)
+                } else {
+                    getString(R.string.s_toast_pair_failed, error.message)
+                }
                 log(msg)
                 runOnUiThread { updateButtonStates() }
             }
@@ -177,23 +183,31 @@ class MainActivity : AppCompatActivity() {
         }
         val triggerAt = System.currentTimeMillis() + 10_000
 
-        log("设置闹钟: $message")
-        sdk.setReminder(
-            taskId = "demo_${System.currentTimeMillis()}",
-            title = sdk.getAppName(),
-            body = message,
-            triggerAt = triggerAt,
-            callback = object : ReminderCallback {
-                override fun onScheduled(taskId: String) {
-                    if (isFinishing || isDestroyed) return
-                    log("闹钟已设置，10秒后触发，退出App")
-                    Toast.makeText(this@MainActivity, getString(R.string.s_reminder_scheduled), Toast.LENGTH_SHORT).show()
-                    finish()
-                }
-                override fun onTriggered(taskId: String) {}
-                override fun onSynced(taskId: String, success: Boolean) {}
-            }
+        log(getString(R.string.s_log_setting_alarm, message))
+        
+        val intent = android.content.Intent(this, DemoAlarmReceiver::class.java).apply {
+            action = DemoAlarmReceiver.ACTION_ALARM_TRIGGER
+            putExtra(DemoAlarmReceiver.EXTRA_TITLE, sdk.getAppName())
+            putExtra(DemoAlarmReceiver.EXTRA_BODY, message)
+        }
+        
+        val flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M)
+                    android.app.PendingIntent.FLAG_IMMUTABLE else 0
+                    
+        val pendingIntent = android.app.PendingIntent.getBroadcast(
+            this,
+            0x7000_0000 + message.hashCode(),
+            intent,
+            flags
         )
+        
+        val info = android.app.AlarmManager.AlarmClockInfo(triggerAt, pendingIntent)
+        alarmManager.setAlarmClock(info, pendingIntent)
+        
+        log(getString(R.string.s_log_alarm_set))
+        Toast.makeText(this, getString(R.string.s_reminder_scheduled), Toast.LENGTH_SHORT).show()
+        finish()
     }
 
 
@@ -273,7 +287,7 @@ class MainActivity : AppCompatActivity() {
 
         if (lastPairedCount != count) {
             lastPairedCount = count
-            log("设备绑定状态更新: 当前已绑定数量=$count")
+            log(getString(R.string.s_log_binding_status_update, count))
         }
     }
 

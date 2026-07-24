@@ -41,7 +41,7 @@
                 android:id="@+id/btn_device_manager"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:textSize="16sp"
+                android:textSize="@dimen/text_size_caption"
                 android:textStyle="bold"
                 android:text="@string/s_device_manager_loading" />
 

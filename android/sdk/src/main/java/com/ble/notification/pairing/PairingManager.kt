@@ -2,6 +2,7 @@ package com.ble.notification.pairing
 
 import android.content.Context
 import com.ble.notification.ble.BleClient
+import org.json.JSONObject
 import com.ble.notification.ble.ConnectionCallback
 import com.ble.notification.protocol.FrameEncoder
 import com.ble.notification.qr.QrResult
@@ -59,7 +60,14 @@ class PairingManager(private val context: Context) {
     }
 
     private fun refreshPairedDevices() {
-        _pairedDevicesFlow.value = getPairedDevices()
+        val devices = getPairedDevices()
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            _pairedDevicesFlow.value = devices
+        } else {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                _pairedDevicesFlow.value = devices
+            }
+        }
     }
 
     private fun migrateLegacyPairing() {
@@ -102,8 +110,8 @@ class PairingManager(private val context: Context) {
         val random = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
 
         android.util.Log.d("BleClient", "PairingManager: starting connectWithScan")
-        BleClient.connectWithScan(
-            context = context,
+        val client = BleClient(context)
+        client.connectWithScan(
             callback = object : ConnectionCallback {
                 override fun onReady(gatt: android.bluetooth.BluetoothGatt) {
                     transitionTo(PairingState.REGISTERING, callback)
@@ -189,26 +197,48 @@ class PairingManager(private val context: Context) {
         baseKeyStr: String,
         pairedAt: Long
     ) {
-        val value = "$uuid|$deviceName|$appName|$baseKeyStr|$pairedAt"
-        prefs.edit().putString(keyFor(uuid), value).apply()
+        val json = JSONObject().apply {
+            put("uuid", uuid)
+            put("name", deviceName)
+            put("appName", appName)
+            put("baseKey", baseKeyStr)
+            put("pairedAt", pairedAt)
+        }
+        prefs.edit().putString(keyFor(uuid), json.toString()).apply()
+    }
+
+    /** Parse stored value as JSON first, falling back to legacy pipe-separated format. */
+    private fun parseStoredValue(value: String): JSONObject? {
+        return try {
+            JSONObject(value)
+        } catch (_: Exception) {
+            // Legacy pipe-separated format: uuid|name|appName|baseKey|pairedAt
+            val parts = value.split("|", limit = 5)
+            if (parts.size < 3) return null
+            JSONObject().apply {
+                put("uuid", parts.getOrNull(0) ?: "")
+                put("name", parts.getOrNull(1) ?: "")
+                put("appName", parts.getOrNull(2) ?: "")
+                put("baseKey", parts.getOrNull(3) ?: "")
+                put("pairedAt", parts.getOrNull(4)?.toLongOrNull() ?: System.currentTimeMillis())
+            }
+        }
     }
 
     fun getDeviceName(uuid: String): String? {
         val value = prefs.getString(keyFor(uuid), null) ?: return null
-        val parts = value.split("|", limit = 5)
-        return parts.getOrNull(1)
+        return parseStoredValue(value)?.optString("name", null)
     }
 
     fun getPairedAppName(uuid: String): String? {
         val value = prefs.getString(keyFor(uuid), null) ?: return null
-        val parts = value.split("|", limit = 5)
-        return parts.getOrNull(2)
+        return parseStoredValue(value)?.optString("appName", null)
     }
 
     fun getBaseKey(uuid: String): ByteArray? {
         val value = prefs.getString(keyFor(uuid), null) ?: return null
-        val parts = value.split("|", limit = 5)
-        val keyStr = parts.getOrNull(3) ?: return null
+        val json = parseStoredValue(value) ?: return null
+        val keyStr = json.optString("baseKey", "") ?: return null
         if (keyStr.isEmpty()) return null
         if (keyStr.startsWith("b64:")) {
             return try {
@@ -217,6 +247,7 @@ class PairingManager(private val context: Context) {
                 null
             }
         }
+        // Legacy comma-separated byte format
         return try {
             keyStr.split(",").map {
                 val v = it.toIntOrNull() ?: 0
@@ -232,11 +263,10 @@ class PairingManager(private val context: Context) {
         return prefs.all.mapNotNull { (key, value) ->
             if (!key.startsWith("pairing_uuid_")) return@mapNotNull null
             val uuid = key.removePrefix("pairing_uuid_")
-            val parts = (value as String).split("|", limit = 5)
-            if (parts.size < 3) return@mapNotNull null
-            val name = parts[1]
-            val appName = parts[2]
-            val pairedAt = parts.getOrNull(4)?.toLongOrNull() ?: System.currentTimeMillis()
+            val json = parseStoredValue(value as String) ?: return@mapNotNull null
+            val name = json.optString("name", "")
+            val appName = json.optString("appName", "")
+            val pairedAt = json.optLong("pairedAt", System.currentTimeMillis())
             PairedDevice(uuid, name, appName, pairedAt)
         }
     }

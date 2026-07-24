@@ -28,43 +28,51 @@ class BleScanWorker(
     companion object {
         const val KEY_TITLE = "title"
         const val KEY_BODY = "body"
-        const val KEY_TASK_ID = "task_id"
+        const val KEY_SEND_ID = "send_id"
         const val WORK_NAME = "ble_scan_send"
     }
 
     override suspend fun doWork(): Result {
         val title = inputData.getString(KEY_TITLE) ?: return Result.failure()
         val body = inputData.getString(KEY_BODY) ?: return Result.failure()
-        val taskId = inputData.getString(KEY_TASK_ID) ?: ""
+        val sendId = inputData.getString(KEY_SEND_ID) ?: ""
 
-        android.util.Log.d("BleClient", "WorkManager: doWork 开始")
+        android.util.Log.d("BleClient", "WorkManager: doWork started")
 
         return try {
             val scanResult = scanForDevice()
             if (scanResult == null) {
-                android.util.Log.e("BleClient", "WorkManager: 扫描超时，未找到设备")
+                android.util.Log.e("BleClient", "WorkManager: scan timeout, device not found")
+                try {
+                    BleNotificationSDK.init(applicationContext).notifySendResult(sendId, false, SdkError.Unknown("Device scan timeout"))
+                } catch (_: Exception) {}
                 return Result.failure()
             }
 
-            android.util.Log.d("BleClient", "WorkManager: 扫描到设备 ${scanResult.device.name ?: "PC"}，尝试连接")
+            android.util.Log.d("BleClient", "WorkManager: device found ${scanResult.device.name ?: "PC"}, connecting")
             val connected = connectAndSend(scanResult.device.address, title, body)
+            val sdk = BleNotificationSDK.init(applicationContext)
             if (connected) {
-                android.util.Log.d("BleClient", "WorkManager: 发送成功")
-                val sdk = BleNotificationSDK.init(applicationContext)
-                sdk.notifySynced(taskId, true)
+                android.util.Log.d("BleClient", "WorkManager: send succeeded")
+                sdk.notifySendResult(sendId, true)
                 Result.success()
             } else {
-                android.util.Log.e("BleClient", "WorkManager: 连接/发送失败")
+                android.util.Log.e("BleClient", "WorkManager: connect/send failed")
+                sdk.notifySendResult(sendId, false, SdkError.Unknown("WorkManager connect/send failed"))
                 Result.failure()
             }
         } catch (e: Exception) {
-            android.util.Log.e("BleClient", "WorkManager: 异常 ${e.message}", e)
+            android.util.Log.e("BleClient", "WorkManager: exception ${e.message}", e)
+            try {
+                BleNotificationSDK.init(applicationContext).notifySendResult(sendId, false, SdkError.Unknown(e.message ?: "Exception"))
+            } catch (_: Exception) {}
             Result.failure()
         }
     }
 
     private suspend fun scanForDevice(): ScanResult? {
-        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return null
+        val manager = applicationContext.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+        val adapter = manager?.adapter ?: @Suppress("DEPRECATION") BluetoothAdapter.getDefaultAdapter() ?: return null
         val scanner = adapter.bluetoothLeScanner ?: return null
 
         android.util.Log.d("BleClient", "WorkManager: scanner=$scanner, state=${adapter.state}")
@@ -108,13 +116,14 @@ class BleScanWorker(
 
     private suspend fun connectAndSend(mac: String, title: String, body: String): Boolean {
         return suspendCancellableCoroutine { cont ->
-            BleClient.connect(applicationContext, mac, object : com.ble.notification.ble.ConnectionCallback {
+            val client = BleClient(applicationContext)
+            client.connect(mac, object : com.ble.notification.ble.ConnectionCallback {
                 override fun onReady(gatt: android.bluetooth.BluetoothGatt) {
                     val pm = PairingManager(applicationContext)
                     val devices = pm.getPairedDevices()
                     val baseKey = devices.firstOrNull()?.let { pm.getBaseKey(it.uuid) }
                     if (baseKey == null) {
-                        gatt.close()
+                        try { gatt.close() } catch (_: Exception) {}
                         if (cont.isActive) cont.resume(false)
                         return
                     }
@@ -126,20 +135,16 @@ class BleScanWorker(
                     val service = gatt.getService(BleClient.SERVICE_UUID)
                     val characteristic = service?.getCharacteristic(BleClient.WRITE_CHARACTERISTIC_UUID)
                     if (characteristic == null) {
-                        gatt.close()
+                        try { gatt.close() } catch (_: Exception) {}
                         if (cont.isActive) cont.resume(false)
                         return
                     }
-                    com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, frame)
-
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        gatt.close()
-                        if (cont.isActive) cont.resume(true)
-                    }, 2000)
+                    val sent = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, frame)
+                    if (cont.isActive) cont.resume(sent)
                 }
 
                 override fun onError(error: com.ble.notification.sdk.SdkError) {
-                    android.util.Log.e("BleClient", "WorkManager 连接失败: ${error.message}")
+                    android.util.Log.e("BleClient", "WorkManager connection failed: ${error.message}")
                     if (cont.isActive) cont.resume(false)
                 }
             })

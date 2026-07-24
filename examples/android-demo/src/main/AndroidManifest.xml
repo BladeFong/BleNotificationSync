@@ -19,5 +19,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <receiver
+            android:name=".DemoAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.ble.notification.demo.ACTION_ALARM_TRIGGER" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

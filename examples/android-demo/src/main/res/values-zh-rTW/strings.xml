@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="s_app_name">BLE 通知同步測試</string>
+    <string name="s_scan_pair">掃描綁定</string>
+    <string name="s_unpair">解除綁定</string>
+    <string name="s_send_reminder">發送提醒 (10 秒後)</string>
+    <string name="s_default_text">測試通知訊息</string>
+    <string name="s_app_display_name">BLE 通知測試</string>
+    <string name="s_unpaired">已解除綁定</string>
+    <string name="s_clear_log">清空日誌</string>
+    <string name="s_device_manager_loading">PC 裝置管理 (載入中…)</string>
+    <string name="s_device_manager_paired">PC 裝置管理 (已連結 %1$d 台 PC)</string>
+    <string name="s_device_manager_none">PC 裝置管理 (暫未綁定裝置)</string>
+    <string name="s_scan_ble_devices">掃描 BLE 裝置 (10 秒)</string>
+    <string name="s_log_waiting">日誌：等待操作…</string>
+    <string name="s_reminder_scheduled">提醒已設定，10 秒後觸發</string>
+    <string name="s_need_alarm_permission">需要鬧鐘權限，跳轉設定…</string>
+    <string name="s_need_notification_permission">需要通知權限以進行後台提醒同步</string>
+    <string name="s_cannot_open_alarm_settings">無法自動開啟設定，請手動開啟精準鬧鐘權限</string>
+    <string name="s_log_start_pairing">開始掃描綁定…</string>
+    <string name="s_log_connecting_device">連接裝置…</string>
+    <string name="s_log_gatt_connecting">GATT 連接中…</string>
+    <string name="s_log_registering">正在註冊…</string>
+    <string name="s_log_paired_success">綁定成功！</string>
+    <string name="s_log_setting_alarm">設定鬧鐘: %1$s</string>
+    <string name="s_log_alarm_set">鬧鐘已設定，10 秒後觸發，退出 App</string>
+    <string name="s_log_binding_status_update">裝置綁定狀態更新: 目前已綁定數量=%1$d</string>
+    <string name="s_toast_already_paired">該裝置已綁定</string>
+    <string name="s_toast_pair_failed">失敗: %1$s</string>
+</resources>

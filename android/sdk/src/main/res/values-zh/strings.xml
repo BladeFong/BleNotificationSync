@@ -16,4 +16,12 @@
     <string name="s_pair_failed">绑定失败: %1$s</string>
     <string name="s_back">返回</string>
     <string name="s_pc_device">PC 设备</string>
+    <string name="s_notification_channel_name">BLE 通知同步</string>
+    <string name="s_notification_channel_desc">BLE 通知同步提醒</string>
+    <string name="s_location_service_title">开启定位服务</string>
+    <string name="s_location_service_message">同步 BLE 通知需要手机开启定位服务，请前往系统设置开启。</string>
+    <string name="s_go_to_settings">前往设置</string>
+    <string name="s_foreground_service_channel">BLE 推送服务</string>
+    <string name="s_foreground_notify_title">BLE 通知同步</string>
+    <string name="s_foreground_scanning">正在扫描设备…</string>
 </resources>

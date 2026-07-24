@@ -21,13 +21,7 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <application>
-        <receiver
-            android:name="com.ble.notification.sdk.AlarmReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.ble.notification.sdk.ACTION_ALARM_TRIGGER" />
-            </intent-filter>
-        </receiver>
+
 
         <service
             android:name="com.ble.notification.sdk.BleForegroundService"

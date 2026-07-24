@@ -16,4 +16,12 @@
     <string name="s_pair_failed">Pairing failed: %1$s</string>
     <string name="s_back">Back</string>
     <string name="s_pc_device">PC Device</string>
+    <string name="s_notification_channel_name">BLE Notification Sync</string>
+    <string name="s_notification_channel_desc">BLE notification sync reminders</string>
+    <string name="s_location_service_title">Enable Location Service</string>
+    <string name="s_location_service_message">Location service is required for BLE notification sync. Please enable it in system settings.</string>
+    <string name="s_go_to_settings">Go to Settings</string>
+    <string name="s_foreground_service_channel">BLE Push Service</string>
+    <string name="s_foreground_notify_title">BLE Notification Sync</string>
+    <string name="s_foreground_scanning">Scanning for devices…</string>
 </resources>

@@ -2,6 +2,7 @@ package com.ble.notification.sdk
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -19,6 +20,15 @@ object LogRepository {
     private val sdf = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     private val lock = Any()
 
+    // 敏感日志全局 debug 开关。线上正式发布时，通过将其置为 false 关停敏感日志持久化。
+    var isDebugEnabled = true
+
+    fun logd(tag: String, msg: String) {
+        if (isDebugEnabled) {
+            Log.d(tag, msg)
+        }
+    }
+
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -31,12 +41,18 @@ object LogRepository {
 
     /**
      * 追加或更新日志。
-     * 如果最新一条日志的消息内容与传入的 msg 相同，则更新其时间戳并返回 (formattedLine, true)；
-     * 否则在末尾追加新行并返回 (formattedLine, false)。
      */
     fun appendOrUpdate(context: Context, msg: String): Pair<String, Boolean> {
         val ts = sdf.format(Date())
         val newLine = "$ts $msg"
+
+        logd("BleLog", msg)
+
+        // 若不是 Debug 调试模式，则严禁在 SharedPreferences 中持久化记录该日志（防范敏感通知数据明文存盘）
+        if (!isDebugEnabled) {
+            return Pair(newLine, false)
+        }
+
         synchronized(lock) {
             val existing = prefs(context).getString(KEY_LOGS, "") ?: ""
             if (existing.isEmpty()) {
@@ -69,7 +85,7 @@ object LogRepository {
      * 获取所有缓存日志（用于启动时恢复）。
      */
     fun getAll(context: Context): String =
-        prefs(context).getString(KEY_LOGS, "") ?: ""
+        if (!isDebugEnabled) "" else prefs(context).getString(KEY_LOGS, "") ?: ""
 
     /**
      * 清空日志。

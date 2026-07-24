@@ -1,9 +1,41 @@
 # Android SDK — 进度日志
 
-## 2026-07-23 — 智能日志去重更新与设备状态动态跟踪优化
-- 智能日志去重与原地时间戳更新：重构 `LogRepository.appendOrUpdate`，当连续收到的日志文本（剔除前导时间戳后）与上一条完全一致时，自动在 SharedPreferences 和 UI 界面中原地更新最后一行的时间戳为最新时间（`HH:mm:ss`）；文本改变时才在下方新起一行追加，解决日志刷屏与时间缺失粘连问题。
-- 设备状态动态跟踪：在 `MainActivity` 中引入 `lastPairedCount` 精准追踪绑定设备数量变动，仅在解绑或绑定设备发生真实数量改变时打出日志，提升界面操控体验。
-- 清理废弃尝试代码：彻底清理系统扫描相关的临时尝试代码与接口，保持代码库整洁与稳定。
+## 2026-07-24 — 审查报告逐条核实、架构解耦重构与全面合规整治（三回合）
+
+### 第一回合：架构解耦 + i18n 补齐
+- **权限辅助抽离**：新建 `PermissionHelper`（internal class），从 BleNotificationSDK 中分离两段式位置权限注册、BLE 权限检查、定位总开关弹窗引导，弹窗字符串改用 `R.string.*` 资源引用
+- **导航辅助抽离**：新建 `Navigator`（internal class），统一管理 QR 扫描 Fragment 弹出/回调、DeviceManagerActivity 跳转、DeviceManagerFragment 实例获取
+- **i18n 补齐 SDK**：`values-zh-rCN/TW/HK` 从各 1 条补齐至 24 条（新增定位对话框、通知渠道、前台服务等字符串）
+- **i18n 补齐 Demo**：新建 `values-zh-rCN/`、`values-zh-rTW/`、`values-zh-rHK/` 三个目录各 27 条，繁中用语按区域差异处理（TW: 裝置/設定/載入/日誌，HK 同）
+
+### 第二回合：审查逐条核实 + 硬编码消除 + 敏感日志净化
+- **审查报告逐条核实**：对 code-review-demo.md / code-review-sdk.md 全部 23 条审查发现逐一代码验证，纠正 4 条虚假/夸大备注，新增 2 条遗漏记录
+- **Demo MAC 日志泄漏修复**：移除 onQrResult 中的 MAC 明文输出，uuid 日志加 `Log.isLoggable` 守卫
+- **Demo 硬编码中文化**：9 处 log/Toast 硬编码中文全部提取至 strings.xml，6 语言文件补齐
+- **Compose 色值规范化**：DeviceManagerFragment 9 处 `Color(0xFF...)` / `Color.Gray` 全部替换为 `MaterialTheme.colors` 引用，`lightColors()` 硬编码背景/表面移除
+- **暗色模式适配**：DeviceManagerFragment 新增 `isSystemInDarkTheme()` 判断，自动切换 `darkColors()` / `lightColors()`
+- **CHANNEL_NAME 去硬编码**：BleNotificationSDK 的 CHANNEL_NAME const val 改为运行时 `context.getString()`，description 同步资源化
+- **BleForegroundService i18n**：3 处硬编码中文（渠道名/通知标题/正文）→ 新增 3 个 string key，6 语言补齐
+- **QrScannerFragment 色值**：`0xFFFFFFFF.toInt()` → `android.graphics.Color.WHITE`
+- **contentDescription 资源化**：`"Scan"` → `stringResource(R.string.s_scan_to_bind_new_device)`
+
+### 第三回合：SDK 中文清零 + 暂缓项全部消化
+- **SdkError 全英文化**：11 条中文错误消息全部改为英文（SDK 默认语言），同步更新 SdkErrorTest 单测
+- **SDK 日志中文清零**：BleScanWorker / BleClient / PermissionHelper / BleForegroundService 共 10 处 Log 中文→英文，确认 SDK 源码中除注释外中文清零
+- **FrameEncoder JSON 序列化**：移除手动字符串拼接的 `jsonString()` / `buildJson()`，改用 `org.json.JSONObject`（Android SDK 内置，零额外依赖）
+- **Compose 字体规范**：DeviceManagerFragment 定义 `TextSizeTitle/Body/Caption` 常量对齐 CLAUDE.md dimens 标准
+- **Demo 字体规范**：新建 `dimens.xml`（22/18/16sp），`activity_main.xml` 的 `16sp` → `@dimen/text_size_caption`
+- **PairingManager 存储 JSON 化**：写入改为 `JSONObject`，新增 `parseStoredValue()` 兼容层（JSON 优先、旧 `|` 分隔自动回退），迁移时自动升级
+- **NativeCrypto.SALT 安全注释**：标注硬编码盐值风险、不改原因、v2 协议升级方向
+
+### 编译验证
+- SDK + Demo 编译通过，SdkErrorTest 2/2 单测通过
+- Demo APK 安装到设备 `adb-bce26679-fZ4RyP` 验证成功
+
+## 2026-07-24 — Demo APK 体积优化
+- 移除 `x86_64` ABI 过滤（仅保留 `arm64-v8a`），debug APK 30MB → 24MB
+- 配置 release buildType（R8 + shrinkResources + proguard-rules.pro），release 8.3MB
+- Demo 仅内部调试用途，不纳入 releases/ 对外分发
 
 ## 2026-07-22 — 审查细节补全：GATT 写入 API 33 兼容封装与权限请求现代化
 

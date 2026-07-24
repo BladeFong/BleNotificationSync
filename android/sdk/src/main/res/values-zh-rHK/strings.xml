@@ -1,4 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="s_qr_scan_hint">掃描 QR 碼進行配對</string>
+    <string name="s_device_manager_title">已連結 PC 裝置</string>
+    <string name="s_unpair">解除綁定</string>
+    <string name="s_unpair_confirm_title">解除綁定裝置</string>
+    <string name="s_unpair_confirm_message">確定要解除與 \"%1$s\" 的綁定關係嗎？解除後將無法同步通知。</string>
+    <string name="s_cancel">取消</string>
+    <string name="s_paired">已綁定</string>
+    <string name="s_no_paired_devices">暫無綁定的 PC 裝置</string>
+    <string name="s_empty_device_hint">點擊下方按鈕掃描 PC 端 QR 碼進行連結</string>
+    <string name="s_bottom_scan_hint">掃描 PC 端顯示的 BLE QR 碼進行綁定</string>
+    <string name="s_scan_to_bind_new_device">掃描 QR 碼綁定新裝置</string>
+    <string name="s_device_already_paired">該裝置已綁定</string>
+    <string name="s_pair_success">綁定成功</string>
+    <string name="s_pair_failed">綁定失敗: %1$s</string>
+    <string name="s_back">返回</string>
+    <string name="s_pc_device">PC 裝置</string>
+    <string name="s_notification_channel_name">BLE 通知同步</string>
+    <string name="s_notification_channel_desc">BLE 通知同步提醒</string>
+    <string name="s_location_service_title">開啟定位服務</string>
+    <string name="s_location_service_message">同步 BLE 通知需使用手機定位服務，請前往系統設定開啟。</string>
+    <string name="s_go_to_settings">前往設定</string>
+    <string name="s_foreground_service_channel">BLE 推送服務</string>
+    <string name="s_foreground_notify_title">BLE 通知同步</string>
+    <string name="s_foreground_scanning">正在掃描裝置…</string>
 </resources>

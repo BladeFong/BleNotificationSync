@@ -8,17 +8,17 @@ class SdkErrorTest {
 
     @Test
     fun `each subtype carries message`() {
-        assertEquals("蓝牙未开启", SdkError.BluetoothDisabled().message)
-        assertEquals("设备不支持蓝牙", SdkError.BluetoothUnavailable().message)
+        assertEquals("Bluetooth is disabled", SdkError.BluetoothDisabled().message)
+        assertEquals("Device does not support Bluetooth", SdkError.BluetoothUnavailable().message)
         assertTrue(SdkError.PermissionDenied(listOf("CAMERA")).message.contains("CAMERA"))
-        assertEquals("未配对的设备", SdkError.NotPaired().message)
+        assertEquals("No paired device", SdkError.NotPaired().message)
         assertTrue(SdkError.DeviceNotFound("AA:BB").message.contains("AA:BB"))
-        assertEquals("GATT 服务未找到", SdkError.ServiceNotFound().message)
+        assertEquals("GATT service not found", SdkError.ServiceNotFound().message)
         assertTrue(SdkError.ConnectionFailed("timeout").message.contains("timeout"))
         assertTrue(SdkError.WriteFailed("busy").message.contains("busy"))
-        assertEquals("加密失败", SdkError.EncryptionFailed().message)
-        assertEquals("操作超时", SdkError.Timeout().message)
-        assertEquals("SDK 已关闭", SdkError.Closed().message)
+        assertEquals("Encryption failed", SdkError.EncryptionFailed().message)
+        assertEquals("Operation timed out", SdkError.Timeout().message)
+        assertEquals("SDK closed", SdkError.Closed().message)
         assertTrue(SdkError.Unknown("test").message.contains("test"))
     }
 

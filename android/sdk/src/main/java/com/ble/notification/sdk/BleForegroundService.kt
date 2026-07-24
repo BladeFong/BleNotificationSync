@@ -18,7 +18,7 @@ class BleForegroundService : Service() {
     companion object {
         const val EXTRA_TITLE = "title"
         const val EXTRA_BODY = "body"
-        const val EXTRA_TASK_ID = "task_id"
+        const val EXTRA_SEND_ID = "send_id"
         private const val NOTIFICATION_ID = 0x7100_0003
         private const val CHANNEL_ID = "ble_notify_service"
     }
@@ -27,7 +27,7 @@ class BleForegroundService : Service() {
         super.onCreate()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = android.app.NotificationChannel(
-                CHANNEL_ID, "BLE 推送服务", android.app.NotificationManager.IMPORTANCE_LOW
+                CHANNEL_ID, getString(R.string.s_foreground_service_channel), android.app.NotificationManager.IMPORTANCE_LOW
             )
             getSystemService(android.app.NotificationManager::class.java).createNotificationChannel(channel)
         }
@@ -37,8 +37,8 @@ class BleForegroundService : Service() {
         if (intent == null) { stopSelf(); return START_NOT_STICKY }
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("BLE 通知同步")
-            .setContentText("正在扫描设备…")
+            .setContentTitle(getString(R.string.s_foreground_notify_title))
+            .setContentText(getString(R.string.s_foreground_scanning))
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -56,20 +56,22 @@ class BleForegroundService : Service() {
 
         val title = intent.getStringExtra(EXTRA_TITLE) ?: ""
         val body = intent.getStringExtra(EXTRA_BODY) ?: ""
-        val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: ""
+        val sendId = intent.getStringExtra(EXTRA_SEND_ID) ?: ""
 
-        scanAndSend(title, body, taskId)
+        scanAndSend(title, body, sendId)
         return START_STICKY
     }
 
-    private fun scanAndSend(title: String, body: String, taskId: String) {
-        BleClient.connectWithScan(applicationContext, object : ConnectionCallback {
+    private fun scanAndSend(title: String, body: String, sendId: String) {
+        val client = BleClient(applicationContext)
+        client.connectWithScan(object : ConnectionCallback {
             override fun onReady(gatt: android.bluetooth.BluetoothGatt) {
                 val sdk = try { BleNotificationSDK.init(applicationContext) } catch (_: Exception) { stopSelf(); return }
                 val pm = PairingManager(applicationContext)
                 val devices = pm.getPairedDevices()
                 val baseKey = devices.firstOrNull()?.let { pm.getBaseKey(it.uuid) } ?: run {
-                    android.util.Log.e("BleClient", "BleForegroundService: 未找到配对设备的密钥")
+                    android.util.Log.e("BleClient", "BleForegroundService: no paired device key found")
+                    sdk.notifySendResult(sendId, false, SdkError.NotPaired())
                     stopSelf()
                     return
                 }
@@ -78,21 +80,27 @@ class BleForegroundService : Service() {
                 val service = gatt.getService(BleClient.SERVICE_UUID)
                 val characteristic = service?.getCharacteristic(BleClient.WRITE_CHARACTERISTIC_UUID)
                 if (characteristic == null) {
-                    android.util.Log.e("BleClient", "BleForegroundService: 特征值未找到")
-                    gatt.close()
+                    android.util.Log.e("BleClient", "BleForegroundService: characteristic not found")
+                    sdk.notifySendResult(sendId, false, SdkError.ServiceNotFound())
+                    try { gatt.close() } catch (_: Exception) {}
                     stopSelf()
                     return
                 }
                 val sent = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, frame)
                 android.util.Log.d("BleClient", "BleForegroundService: writeCharacteristic sent=$sent")
 
-                sdk.notifySynced(taskId, true)
-                Handler(Looper.getMainLooper()).postDelayed({ gatt.close(); stopSelf() }, 3000)
+                if (sent) {
+                    sdk.notifySendResult(sendId, true)
+                } else {
+                    sdk.notifySendResult(sendId, false, SdkError.Unknown("Gatt write failed"))
+                }
+                // 这里只负责 stopSelf() 服务自身生命周期结束，Gatt 的 close 由 BleClient 中的回调自动闭环
+                Handler(Looper.getMainLooper()).postDelayed({ stopSelf() }, 1500)
 
             }
 
             override fun onError(error: SdkError) {
-                try { BleNotificationSDK.init(applicationContext).notifySynced(taskId, false) } catch (_: Exception) {}
+                try { BleNotificationSDK.init(applicationContext).notifySendResult(sendId, false, error) } catch (_: Exception) {}
                 stopSelf()
             }
         })

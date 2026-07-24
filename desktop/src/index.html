@@ -13,10 +13,6 @@
                 <span class="label" data-i18n="status">状态:</span>
                 <span id="status" class="value" data-i18n="stopped">未启动</span>
             </div>
-            <div class="status-item">
-                <span class="label" data-i18n="connections">连接数:</span>
-                <span id="connections" class="value">0</span>
-            </div>
         </div>
         
         <div class="button-group">
@@ -44,8 +40,8 @@
         document.documentElement.lang = isChinese ? 'zh-CN' : 'en';
         
         const translations = {
-            zh: { status: '状态:', stopped: '未启动', connections: '连接数:', paired_devices: '已绑定设备:', start: '启动服务', stop: '停止服务', pair: '扫码绑定' },
-            en: { status: 'Status:', stopped: 'Stopped', connections: 'Connections:', paired_devices: 'Paired Devices:', start: 'Start', stop: 'Stop', pair: 'Pair Device' }
+            zh: { status: '状态:', stopped: '未启动', paired_devices: '已绑定设备:', start: '启动服务', stop: '停止服务', pair: '扫码绑定' },
+            en: { status: 'Status:', stopped: 'Stopped', paired_devices: 'Paired Devices:', start: 'Start', stop: 'Stop', pair: 'Pair Device' }
         };
         
         const t = isChinese ? translations.zh : translations.en;

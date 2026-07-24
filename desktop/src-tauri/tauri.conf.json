@@ -12,9 +12,9 @@
       {
         "label": "main",
         "title": "BLE Notification Sync",
-        "width": 700,
-        "height": 550,
-        "minWidth": 500,
+        "width": 760,
+        "height": 560,
+        "minWidth": 600,
         "minHeight": 400,
         "resizable": true,
         "center": true,

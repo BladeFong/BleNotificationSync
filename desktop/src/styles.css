@@ -165,50 +165,88 @@ h1 {
     margin-bottom: 12px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     flex-shrink: 0;
-    max-height: 120px;
-    overflow-y: auto;
+    height: 110px; /* 固定预留空间：可容纳 2 行（4 条）设备 */
+    display: flex;
+    flex-direction: column;
 }
 
 .section-header {
     display: flex;
     justify-content: space-between;
     margin-bottom: 6px;
+    flex-shrink: 0;
 }
 
 .device-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* 两列布局 */
+    gap: 6px 8px; /* 行间距 6px，列间距 8px */
     font-size: 13px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
 }
 
 .device-empty {
     color: #999;
     font-style: italic;
+    grid-column: 1 / -1;
 }
 
 .device-item {
     display: flex;
-    gap: 8px;
-    padding: 4px 0;
-    border-bottom: 1px solid #f0f0f0;
     align-items: center;
+    justify-content: space-between;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 4px 8px;
+    gap: 4px;
+    height: 28px; /* 固定单行记录高度 */
+    min-width: 0;
+    transition: all 0.2s ease;
 }
 
-.device-item:last-child {
-    border-bottom: none;
+.device-item:hover {
+    border-color: #cbd5e1;
+    background: #f1f5f9;
 }
 
 .device-name {
     font-weight: 600;
     color: #2563eb;
-    min-width: 60px;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px; /* 两列布局下防止挤压包名，放宽至 120px 保证设备名完整 */
+    flex-shrink: 0;
+    margin-right: 14px; /* 加大设备名与包名之间的间隙 */
 }
 
 .device-pkg {
-    color: #666;
+    color: #64748b;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     flex: 1;
+    min-width: 0;
 }
 
-.device-mac {
-    color: #999;
-    font-family: 'Consolas', monospace;
-    font-size: 12px;
+.device-remove-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.device-remove-btn:hover {
+    color: #ef4444;
 }

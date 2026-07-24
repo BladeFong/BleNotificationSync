@@ -38,7 +38,10 @@ impl Default for StorageState {
         let devices = cfg
             .devices
             .into_iter()
-            .map(|d| (d.device_id.clone(), PairedDevice::from(d)))
+            .map(|d| {
+                let key = format!("{}:{}", d.device_id, d.package_name);
+                (key, PairedDevice::from(d))
+            })
             .collect();
         Self {
             devices: Mutex::new(devices),
@@ -101,7 +104,8 @@ pub fn add_paired_device(
         paired_at: chrono::Utc::now().to_rfc3339(),
     };
 
-    devices.insert(device_id.clone(), device);
+    let key_str = format!("{}:{}", device_id, package_name);
+    devices.insert(key_str, device);
     drop(devices);
 
     // Persist to JSON config
@@ -114,28 +118,35 @@ pub fn add_paired_device(
 pub fn remove_paired_device(
     state: State<StorageState>,
     device_id: String,
+    package_name: String,
 ) -> Result<String, String> {
     let mut devices = state.devices.lock().map_err(|e| e.to_string())?;
+    let key = format!("{}:{}", device_id, package_name);
 
     // Delete baseKey from Credential Manager
-    if let Some(device) = devices.get(&device_id) {
-        let _ = config::delete_base_key(&device_id, &device.package_name);
+    if devices.contains_key(&key) {
+        let _ = config::delete_base_key(&device_id, &package_name);
+        devices.remove(&key);
     }
 
-    devices.remove(&device_id);
     drop(devices);
 
     // Persist to JSON config
     sync_devices_to_config(&state);
 
-    Ok(format!("Device {} removed", device_id))
+    Ok(format!("Device {} package {} removed", device_id, package_name))
 }
 
 /// 获取存储的 baseKey（hex 字符串）
 #[tauri::command]
-pub fn get_device_key(state: State<StorageState>, device_id: String) -> Result<String, String> {
+pub fn get_device_key(
+    state: State<StorageState>,
+    device_id: String,
+    package_name: String,
+) -> Result<String, String> {
     let devices = state.devices.lock().map_err(|e| e.to_string())?;
-    let device = devices.get(&device_id).ok_or("Device not found")?;
+    let key = format!("{}:{}", device_id, package_name);
+    let device = devices.get(&key).ok_or("Device not found")?;
 
     config::get_base_key(&device_id, &device.package_name)
         .map(|key| hex::encode(key))

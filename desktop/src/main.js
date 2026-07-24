@@ -130,9 +130,9 @@ listen('show-window', () => {
 
 // ── 设备列表 ──
 
-async function removeDevice(deviceId, deviceName) {
+async function removeDevice(deviceId, packageName, deviceName) {
     try {
-        await invoke('remove_paired_device', { deviceId });
+        await invoke('remove_paired_device', { deviceId, packageName });
         addLog(`${isChinese ? '已移除设备' : 'Device removed'}: ${deviceName}`);
         refreshDeviceList();
     } catch (e) {
@@ -155,15 +155,16 @@ async function refreshDeviceList() {
             `<div class="device-item">
                 <span class="device-name" title="${d.device_name}">${d.device_name}</span>
                 <span class="device-pkg" title="${d.package_name}">${d.package_name}</span>
-                <button class="device-remove-btn" data-id="${d.device_id}" data-name="${d.device_name}" title="${isChinese ? '移除设备' : 'Remove Device'}">×</button>
+                <button class="device-remove-btn" data-id="${d.device_id}" data-pkg="${d.package_name}" data-name="${d.device_name}" title="${isChinese ? '移除设备' : 'Remove Device'}">×</button>
             </div>`
         ).join('');
 
         deviceList.querySelectorAll('.device-remove-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const deviceId = e.currentTarget.getAttribute('data-id');
+                const packageName = e.currentTarget.getAttribute('data-pkg');
                 const deviceName = e.currentTarget.getAttribute('data-name');
-                removeDevice(deviceId, deviceName);
+                removeDevice(deviceId, packageName, deviceName);
             });
         });
     } catch (e) {

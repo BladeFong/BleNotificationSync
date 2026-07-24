@@ -1,4 +1,6 @@
 jdk:
   - openjdk17
 before_install:
-  - cd android
+  - git submodule update --init --recursive
+install:
+  - cd android && ./gradlew publishToMavenLocal

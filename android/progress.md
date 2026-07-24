@@ -1,5 +1,10 @@
 # Android SDK — 进度日志
 
+## 2026-07-24 — 支持 NDK C++ 子模块 JitPack 构建与 Release 编译修补
+
+- 支持 NDK C++ 模块的 JitPack 构建：在 `jitpack.yml` 中添加了 `git submodule update --init --recursive` 自动拉取 `libtomcrypt` 子模块。由于项目根目录没有 `gradlew`，自定义了 `install` 阶段命令在 `android/` 子目录下执行 `publishToMavenLocal` 进行编译和构建。
+- 修复 Release 编译缺陷：补齐了 `PairingManager.kt` 里的 `PairingState.PAIRED` 状态分支，使 `when` 表达式穷尽，从而顺利通过 Release 模式下的严格 Kotlin 编译（避免了 Warning 升级为 Error 导致构建失败）。
+
 ## 2026-07-24 — 审查报告核实与修复（14 项闭环）
 
 - 审查子代理产出 `docs/code-review-20260724.md`（SDK 9 + Demo 5，共 14 项）

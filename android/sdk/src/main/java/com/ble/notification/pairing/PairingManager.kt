@@ -292,8 +292,7 @@ class PairingManager(private val context: Context) {
         when (state) {
             PairingState.CONNECTING -> callback.onConnecting()
             PairingState.REGISTERING -> callback.onRegistering()
-            // PAIRED 是配对流程终态，回调 onPaired() 由 startPairing() 在 transitionTo 后统一触发
-            // （含 savePairing 等收尾逻辑），与 CONNECTING/REGISTERING 等中间态的处理方式不同
+            PairingState.PAIRED -> { /* PAIRED 是配对流程终态，回调 onPaired() 由 startPairing() 在 transitionTo 后统一触发 */ }
             PairingState.IDLE -> { /* reset */ }
         }
     }

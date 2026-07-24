@@ -1,5 +1,11 @@
 # Progress Log
 
+## 2026-07-24 — 修复同设备多 App 绑定覆盖 Bug
+
+- **同设备多 App 绑定支持**：修复了在相同设备（`device_id` 相同）上由于内存 `StorageState::devices` 使用单一 `device_id` 作为主键导致多 App 绑定被覆盖的逻辑漏洞。
+- **主键升级组合键**：重构了设备绑定的内存主键，升级为组合键 `format!("{}:{}", device_id, package_name)`，实现同设备不同包名共存显示。
+- **命令签名重构**：升级了 `remove_paired_device` 和 `get_device_key` 后端命令，加入 `package_name` 参数以实现多 App 绑定的精准删除与读取；JS 前端 `main.js` 列表按钮同步传参 `data-pkg` 并对齐调用。
+
 ## 2026-07-24 — sendNotification 开放 notificationId 参数 + AAR 更新
 
 - `sendNotification()` 两个重载新增 `notificationId: Int? = null` 可选参数，集成方可自行控制通知 ID；不传则沿用 title+body 哈希自动生成。

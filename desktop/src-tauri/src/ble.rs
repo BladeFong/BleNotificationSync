@@ -140,15 +140,16 @@ async fn handle_register(app_handle: &AppHandle, payload: &[u8]) {
         let mut last_pkg = storage_state.last_registered_package.lock().unwrap();
         *last_pkg = Some(data.package.clone());
     }
+    let pair_key = format!("{}:{}", device_id, data.package);
     {
         let mut devices = storage_state.devices.lock().unwrap();
-        // 如果设备已存在，更新设备名（支持动态更新）
-        if let Some(existing) = devices.get_mut(&device_id) {
+        // 如果该设备的该 App 已存在，更新设备名（支持动态更新）
+        if let Some(existing) = devices.get_mut(&pair_key) {
             existing.device_name = device_name.clone();
             existing.app_name = data.app_name.clone();
             existing.paired_at = chrono::Utc::now().to_rfc3339();
         } else {
-            devices.insert(device_id.clone(), storage::PairedDevice {
+            devices.insert(pair_key.clone(), storage::PairedDevice {
                 device_id: device_id.clone(),
                 device_name: device_name.clone(),
                 app_name: data.app_name.clone(),

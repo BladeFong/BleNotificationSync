@@ -127,9 +127,11 @@ sdk.startPairing(activity, "我的应用名", object : PairingCallback {
 })
 
 // 3. 推送通知给所有已绑定的 PC
+//    可选参数 notificationId 指定本地通知 ID，不传则根据标题+内容自动生成
 sdk.sendNotification(
     title = "会议提醒",
     body = "项目周会将于 10 分钟后开始",
+    // notificationId = 1001,  // 可选：指定通知 ID，便于后续取消或更新
     callback = object : SendCallback {
         override fun onSuccess() { /* 推送成功 */ }
         override fun onError(error: String) { /* 异常处理 */ }

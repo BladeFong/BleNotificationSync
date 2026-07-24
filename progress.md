@@ -1,5 +1,11 @@
 # Progress Log
 
+## 2026-07-24 — sendNotification 开放 notificationId 参数 + AAR 更新
+
+- `sendNotification()` 两个重载新增 `notificationId: Int? = null` 可选参数，集成方可自行控制通知 ID；不传则沿用 title+body 哈希自动生成。
+- README（中/英）用法示例、设计文档 API 签名同步对齐。
+- 重新编译 `sdk-release.aar`，包含 R8 consumer-rules.pro + 最新 API，更新到 `releases/android/`。
+
 ## 2026-07-24 — 界面清理与设备解绑重构
 
 - **界面精简**：从 HTML/JS/CSS 中彻底移除了无实际价值的“连接数”记录展示。

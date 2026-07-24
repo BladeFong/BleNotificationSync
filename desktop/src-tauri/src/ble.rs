@@ -224,7 +224,7 @@ async fn handle_notify(app_handle: &AppHandle, payload: &[u8]) {
         let devices = storage_state.devices.lock().unwrap();
         devices.iter()
             .filter(|(_, d)| d.package_name == package)
-            .map(|(id, _)| id.clone())
+            .map(|(_, d)| d.device_id.clone())
             .collect()
     };
 

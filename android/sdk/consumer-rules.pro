@@ -32,3 +32,16 @@
 
 # ── BleScanWorker (WorkManager reflection) ──
 -keep class com.ble.notification.sdk.BleScanWorker { *; }
+
+# ML Kit Barcode Scanning & GMS (Resolve getClass() NPE on initialization)
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.mlkit.**
+-dontwarn com.google.android.gms.**
+-keepclassmembers class * extends com.google.android.gms.internal.mlkit_vision_barcode_bundled.zzeh {
+    <fields>;
+}
+
+# CameraX
+-keep class androidx.camera.** { *; }
+-dontwarn androidx.camera.**

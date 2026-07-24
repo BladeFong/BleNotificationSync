@@ -116,7 +116,7 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
                     android:textIsSelectable="true"
-                    android:textSize="12sp"
+                    android:textSize="@dimen/text_size_log"
                     android:text="@string/s_log_waiting" />
 
 

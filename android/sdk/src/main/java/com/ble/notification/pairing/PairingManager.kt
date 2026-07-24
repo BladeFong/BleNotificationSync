@@ -263,7 +263,7 @@ class PairingManager(private val context: Context) {
         return prefs.all.mapNotNull { (key, value) ->
             if (!key.startsWith("pairing_uuid_")) return@mapNotNull null
             val uuid = key.removePrefix("pairing_uuid_")
-            val json = parseStoredValue(value as String) ?: return@mapNotNull null
+            val json = parseStoredValue(value as? String ?: return@mapNotNull null) ?: return@mapNotNull null
             val name = json.optString("name", "")
             val appName = json.optString("appName", "")
             val pairedAt = json.optLong("pairedAt", System.currentTimeMillis())
@@ -292,7 +292,8 @@ class PairingManager(private val context: Context) {
         when (state) {
             PairingState.CONNECTING -> callback.onConnecting()
             PairingState.REGISTERING -> callback.onRegistering()
-            PairingState.PAIRED -> { /* already called */ }
+            // PAIRED 是配对流程终态，回调 onPaired() 由 startPairing() 在 transitionTo 后统一触发
+            // （含 savePairing 等收尾逻辑），与 CONNECTING/REGISTERING 等中间态的处理方式不同
             PairingState.IDLE -> { /* reset */ }
         }
     }

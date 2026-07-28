@@ -62,3 +62,17 @@ build/
 **/CLAUDE.md
 **/GEMINI.md
 
+# Process Docs (local only)
+progress.md
+**/progress.md
+findings.md
+**/findings.md
+task_plan.md
+**/task_plan.md
+**/modules/
+docs/superpowers/
+**/docs/superpowers/
+**/docs/code-review*.md
+**/CODE_REVIEW.md
+examples/android-demo/DESIGN.md
+examples/android-demo/PLAN.md

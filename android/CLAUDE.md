@@ -1,1 +1,0 @@
-/home/lanef/Android/StudioProjects/AGENTS.md

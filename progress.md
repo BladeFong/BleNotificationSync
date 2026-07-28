@@ -1,5 +1,13 @@
 # Progress Log
 
+## 2026-07-28 — 接入 GitHub Actions 自动化发布工作流
+
+- **Releases 自动化发布**：彻底移除以往在 Git 代码库中直接提交物理二进制大文件的做法，使 Git 仓库回归源码纯净状态。
+- **GitHub Action 配置**：创建并升级 `.github/workflows/release.yml`，支持推送 `v*` 版本 tag 时自动在云端虚拟机中打包发布：
+  - **Windows & Linux**：自动编译生成 Tauri 桌面包；
+  - **Android**：增设 `publish-android` 自动编译 Demo APK 与 SDK AAR；
+  - **macOS**：在构建矩阵中追加 `macos-latest` 平台，支持自动编译生成 macOS 桌面版 DMG/App 发行包。
+
 ## 2026-07-24 — 修复同设备多 App 绑定覆盖 Bug
 
 - **同设备多 App 绑定支持**：修复了在相同设备（`device_id` 相同）上由于内存 `StorageState::devices` 使用单一 `device_id` 作为主键导致多 App 绑定被覆盖的逻辑漏洞。

@@ -4,6 +4,29 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: '上传到的 Release Tag（如 v0.1.0）'
+        type: string
+        required: true
+      build_windows:
+        description: '编译 Windows'
+        type: boolean
+        default: true
+      build_linux:
+        description: '编译 Linux'
+        type: boolean
+        default: true
+      build_macos:
+        description: '编译 macOS'
+        type: boolean
+        default: true
+      build_android:
+        description: '编译 Android (APK + AAR)'
+        type: boolean
+        default: true
+
 
 permissions:
   contents: write
@@ -12,6 +35,11 @@ jobs:
   publish-tauri:
     permissions:
       contents: write
+    if: |
+      github.event_name == 'push' ||
+      (matrix.platform == 'windows-latest' && inputs.build_windows) ||
+      (matrix.platform == 'ubuntu-22.04' && inputs.build_linux) ||
+      (matrix.platform == 'macos-latest' && inputs.build_macos)
     strategy:
       fail-fast: false
       matrix:
@@ -24,6 +52,8 @@ jobs:
             args: ""
 
     runs-on: ${{ matrix.platform }}
+    env:
+      TAG_NAME: ${{ github.event_name == 'push' && github.ref_name || inputs.tag_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -52,9 +82,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "BLE Notification Sync ${{ github.ref_name }}"
-          releaseBody: "BLE Notification Sync ${{ github.ref_name }} has been compiled and released successfully."
+          tagName: ${{ env.TAG_NAME }}
+          releaseName: "BLE Notification Sync ${{ env.TAG_NAME }}"
+          releaseBody: "BLE Notification Sync ${{ env.TAG_NAME }} has been compiled and released successfully."
           releaseDraft: false
           prerelease: false
           projectPath: "desktop"
@@ -62,9 +92,12 @@ jobs:
           includeDebug: false
 
   publish-android:
+    if: github.event_name == 'push' || inputs.build_android
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    env:
+      TAG_NAME: ${{ github.event_name == 'push' && github.ref_name || inputs.tag_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -87,10 +120,10 @@ jobs:
           mv android/sdk/build/outputs/aar/sdk-release.aar android/sdk/build/outputs/aar/ble-notification-sdk.aar
 
       - name: Wait for release to be created
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         run: |
           for i in {1..20}; do
-            if gh release view ${{ github.ref_name }} > /dev/null 2>&1; then
+            if gh release view ${{ env.TAG_NAME }} > /dev/null 2>&1; then
               echo "Release found."
               break
             fi
@@ -101,9 +134,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Android assets to Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         run: |
-          gh release upload ${{ github.ref_name }} \
+          gh release upload ${{ env.TAG_NAME }} \
             examples/android-demo/build/outputs/apk/debug/ble-notification-demo.apk \
             android/sdk/build/outputs/aar/ble-notification-sdk.aar \
             --clobber

@@ -38,6 +38,9 @@ build/
 
 # Releases
 /releases/android/*.apk
+/releases/windows/*
+/releases/linux/*
+!/releases/README.md
 
 # Rules
 **/CLAUDE.md

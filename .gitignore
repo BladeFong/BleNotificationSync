@@ -39,3 +39,5 @@ build/
 # Releases
 /releases/android/*.apk
 
+# Rules
+**/CLAUDE.md

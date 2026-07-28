@@ -30,6 +30,22 @@ build/
 .vscode/
 .idea/
 
+# AI Tools
+**/.claude/
+**/.gemini/
+**/.cursor/
+**/.aider/
+**/.continue/
+**/.cline/
+**/.roo/
+**/.windsurf/
+**/.codium/
+**/.cody/
+**/.qodo/
+**/.codeium/
+**/.copilot/
+**/.tabnine/
+
 # MiMoCode
 .mimocode/
 

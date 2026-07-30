@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - "v*"
-    branches-ignore:
-      - "**"
   workflow_dispatch:
     inputs:
       tag_name:
@@ -37,49 +35,50 @@ jobs:
   publish-tauri:
     permissions:
       contents: write
-    if: |
-      github.event_name == 'push' ||
-      (matrix.platform == 'windows-latest' && inputs.build_windows) ||
-      (matrix.platform == 'ubuntu-22.04' && inputs.build_linux) ||
-      (matrix.platform == 'macos-latest' && inputs.build_macos)
+    if: github.event_name == 'push' || inputs.build_windows || inputs.build_linux || inputs.build_macos
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: "windows-latest"
-            args: ""
+            enable: ${{ github.event_name == 'push' || inputs.build_windows }}
           - platform: "ubuntu-22.04"
-            args: ""
+            enable: ${{ github.event_name == 'push' || inputs.build_linux }}
           - platform: "macos-latest"
-            args: ""
+            enable: ${{ github.event_name == 'push' || inputs.build_macos }}
 
     runs-on: ${{ matrix.platform }}
     env:
       TAG_NAME: ${{ github.event_name == 'push' && github.ref_name || inputs.tag_name }}
     steps:
       - name: Checkout repository
+        if: matrix.enable
         uses: actions/checkout@v4
 
       - name: Setup node
+        if: matrix.enable
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
 
       - name: Install Rust stable
+        if: matrix.enable
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.enable && matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install frontend dependencies
+        if: matrix.enable
         run: |
           cd desktop
           npm install
 
       - name: Build Tauri app
+        if: matrix.enable
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

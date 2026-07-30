@@ -20,26 +20,16 @@ class BleForegroundService : Service() {
         const val EXTRA_BODY = "body"
         const val EXTRA_SEND_ID = "send_id"
         private const val NOTIFICATION_ID = 0x7100_0003
-        private const val CHANNEL_ID = "ble_notify_service"
-    }
-
-    override fun onCreate() {
-        super.onCreate()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = android.app.NotificationChannel(
-                CHANNEL_ID, getString(R.string.s_foreground_service_channel), android.app.NotificationManager.IMPORTANCE_LOW
-            )
-            getSystemService(android.app.NotificationManager::class.java).createNotificationChannel(channel)
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) { stopSelf(); return START_NOT_STICKY }
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val appIcon = applicationInfo.icon.let { if (it != 0) it else android.R.drawable.ic_dialog_info }
+        val notification = NotificationCompat.Builder(this, BleNotificationSDK.getDefaultChannelId(this))
             .setContentTitle(getString(R.string.s_foreground_notify_title))
             .setContentText(getString(R.string.s_foreground_scanning))
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(appIcon)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()

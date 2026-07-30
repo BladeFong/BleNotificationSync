@@ -35,7 +35,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
     val pairedDevicesState: StateFlow<List<PairedDevice>> = pairingManager.pairedDevicesFlow
 
     companion object {
-        const val CHANNEL_ID = "ble_notify_reminders"
+        fun getDefaultChannelId(context: Context): String = "${context.packageName}.notify"
 
         @Volatile
         private var instance: BleNotificationSDK? = null
@@ -53,14 +53,40 @@ class BleNotificationSDK private constructor(private val context: Context) {
             )
         }
 
-        fun createNotificationChannel(context: Context) {
+        fun getAppName(context: Context): String {
+            return try {
+                val pm = context.packageManager
+                val ai = pm.getApplicationInfo(context.packageName, 0)
+                pm.getApplicationLabel(ai).toString()
+            } catch (_: Exception) {
+                "Notification"
+            }
+        }
+
+        fun createNotificationChannel(
+            context: Context,
+            channelId: String = getDefaultChannelId(context),
+            channelName: String? = null,
+            channelDescription: String? = null
+        ) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-            val channel = android.app.NotificationChannel(
-                CHANNEL_ID,
-                context.getString(R.string.s_notification_channel_name),
-                android.app.NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = context.getString(R.string.s_notification_channel_desc) }
+
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val existingChannel = nm.getNotificationChannel(channelId)
+            if (existingChannel != null) {
+                return
+            }
+
+            val name = channelName ?: getAppName(context)
+            val desc = channelDescription ?: context.getString(R.string.s_notification_channel_desc)
+
+            val channel = android.app.NotificationChannel(
+                channelId,
+                name,
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = desc
+            }
             nm.createNotificationChannel(channel)
         }
     }
@@ -146,11 +172,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
     // ── 通知发送 ──
 
     /** 获取集成 App 的显示名称（来自 AndroidManifest application label） */
-    fun getAppName(): String {
-        val pm = context.packageManager
-        val ai = pm.getApplicationInfo(context.packageName, 0)
-        return pm.getApplicationLabel(ai).toString()
-    }
+    fun getAppName(): String = getAppName(context)
 
     fun sendNotification(
         title: String,
@@ -160,9 +182,13 @@ class BleNotificationSDK private constructor(private val context: Context) {
     ) {
         if (checkClosed(callback)) return
         val finalTitle = title.ifBlank { getAppName() }
+        val defaultChannelId = getDefaultChannelId(context)
 
-        val builder = androidx.core.app.NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+        createNotificationChannel(context, defaultChannelId)
+
+        val appIcon = context.applicationInfo.icon.let { if (it != 0) it else android.R.drawable.ic_dialog_info }
+        val builder = androidx.core.app.NotificationCompat.Builder(context, defaultChannelId)
+            .setSmallIcon(appIcon)
             .setContentTitle(finalTitle)
             .setContentText(body)
             .setAutoCancel(true)
@@ -247,6 +273,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
             }
         }
     }
+
 
     // ── 生命周期 ──
 

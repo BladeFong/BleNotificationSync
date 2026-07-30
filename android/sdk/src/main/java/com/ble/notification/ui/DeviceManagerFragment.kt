@@ -38,7 +38,7 @@ import com.ble.notification.sdk.BleNotificationSDK
 import com.ble.notification.sdk.R
 import com.ble.notification.sdk.SdkError
 
-// Compose typography constants (CLAUDE.md: text_size_title=22sp, body=18sp, caption=16sp)
+// Compose typography constants: title=22sp, body=18sp, caption=16sp
 private val TextSizeTitle = 22.sp
 private val TextSizeBody = 18.sp
 private val TextSizeCaption = 16.sp

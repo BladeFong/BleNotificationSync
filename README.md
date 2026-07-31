@@ -105,10 +105,39 @@ npx tauri dev
 ```kotlin
 dependencies {
     implementation(project(":sdk"))
-    // 或使用编译好的 AAR:
-    // implementation(files("libs/ble-notification-sdk-release.aar"))
+    // 或使用预编译好的 AAR:
+    // implementation(files("releases/android/ble-notification-sdk.aar"))
 }
 ```
+
+##### 本地 Maven 镜像库发布与引用（推荐）
+
+如果您希望在本地独立集成或测试 SDK，可将其打包发布到本地 Maven 缓存目录（`~/.m2/repository/`）：
+
+1. **发布至本地 Maven 缓存**：
+   ```bash
+   cd android
+   ./gradlew publishToMavenLocal
+   ```
+
+2. **在目标项目中引用**：
+   在目标项目的 `settings.gradle.kts` 中引入 `mavenLocal()`：
+   ```kotlin
+   dependencyResolutionManagement {
+       repositories {
+           mavenLocal() // 优先从本地 Maven 缓存检索
+           google()
+           mavenCentral()
+           maven { url = uri("https://jitpack.io") }
+       }
+   }
+   ```
+   在目标模块的 `build.gradle.kts` 中加入坐标依赖：
+   ```kotlin
+   dependencies {
+       implementation("com.github.BladeFong:BleNotificationSync:master-SNAPSHOT")
+   }
+   ```
 
 #### 调用示例
 

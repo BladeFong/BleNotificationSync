@@ -100,8 +100,9 @@ afterEvaluate {
     publishing {
         publications {
             register<MavenPublication>("release") {
-                groupId = "com.github.BladeFong.BleNotificationSync"
-                artifactId = "sdk"
+                groupId = "com.github.BladeFong"
+                artifactId = "BleNotificationSync"
+                version = "master-SNAPSHOT"
 
                 afterEvaluate {
                     from(components["release"])

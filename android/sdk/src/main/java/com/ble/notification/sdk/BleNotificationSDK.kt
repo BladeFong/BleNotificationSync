@@ -43,7 +43,6 @@ class BleNotificationSDK private constructor(private val context: Context) {
         fun init(context: Context): BleNotificationSDK {
             return instance ?: synchronized(this) {
                 instance ?: BleNotificationSDK(context.applicationContext).also { instance = it }
-                    .also { createNotificationChannel(context.applicationContext) }
             }
         }
 

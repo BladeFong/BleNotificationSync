@@ -25,13 +25,17 @@ class BleForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) { stopSelf(); return START_NOT_STICKY }
 
+        val channelId = BleNotificationSDK.getServiceChannelId(this)
+        BleNotificationSDK.createServiceNotificationChannel(this)
+
         val appIcon = applicationInfo.icon.let { if (it != 0) it else android.R.drawable.ic_dialog_info }
-        val notification = NotificationCompat.Builder(this, BleNotificationSDK.getDefaultChannelId(this))
+        val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle(getString(R.string.s_foreground_notify_title))
             .setContentText(getString(R.string.s_foreground_scanning))
             .setSmallIcon(appIcon)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
             .build()
 
         val serviceType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

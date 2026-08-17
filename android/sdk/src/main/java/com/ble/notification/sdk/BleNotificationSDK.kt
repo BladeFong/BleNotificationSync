@@ -36,6 +36,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
     companion object {
         fun getDefaultChannelId(context: Context): String = "${context.packageName}.notify"
+        fun getServiceChannelId(context: Context): String = "${context.packageName}.service"
 
         @Volatile
         private var instance: BleNotificationSDK? = null
@@ -88,6 +89,28 @@ class BleNotificationSDK private constructor(private val context: Context) {
             }
             nm.createNotificationChannel(channel)
         }
+
+        fun createServiceNotificationChannel(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
+            val channelId = getServiceChannelId(context)
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (nm.getNotificationChannel(channelId) != null) {
+                return
+            }
+
+            val name = context.getString(R.string.s_foreground_service_channel)
+            val channel = android.app.NotificationChannel(
+                channelId,
+                name,
+                android.app.NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                setSound(null, null)
+                enableVibration(false)
+                setShowBadge(false)
+            }
+            nm.createNotificationChannel(channel)
+        }
     }
 
     /**
@@ -123,6 +146,8 @@ class BleNotificationSDK private constructor(private val context: Context) {
             override fun onConnecting() = callback.onConnecting()
             override fun onRegistering() = callback.onRegistering()
             override fun onPaired() {
+                createNotificationChannel(context)
+                createServiceNotificationChannel(context)
                 callback.onPaired()
             }
             override fun onError(error: SdkError) = callback.onError(error)

@@ -113,11 +113,11 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew :demo:assembleDebug :sdk:bundleReleaseAar
+          ./gradlew :demo:assembleRelease :sdk:bundleReleaseAar
 
       - name: Prepare release files
         run: |
-          mv examples/android-demo/build/outputs/apk/debug/demo-debug.apk examples/android-demo/build/outputs/apk/debug/ble-notification-demo.apk
+          mv examples/android-demo/build/outputs/apk/release/demo-release.apk examples/android-demo/build/outputs/apk/release/ble-notification-demo.apk
           mv android/sdk/build/outputs/aar/sdk-release.aar android/sdk/build/outputs/aar/ble-notification-sdk.aar
 
       - name: Wait for release to be created
@@ -138,7 +138,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         run: |
           gh release upload ${{ env.TAG_NAME }} \
-            examples/android-demo/build/outputs/apk/debug/ble-notification-demo.apk \
+            examples/android-demo/build/outputs/apk/release/ble-notification-demo.apk \
             android/sdk/build/outputs/aar/ble-notification-sdk.aar \
             --clobber
         env:

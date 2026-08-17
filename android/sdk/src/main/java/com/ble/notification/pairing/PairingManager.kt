@@ -116,49 +116,72 @@ class PairingManager(private val context: Context) {
                 override fun onReady(gatt: android.bluetooth.BluetoothGatt) {
                     transitionTo(PairingState.REGISTERING, callback)
 
-                    val registerFrame = FrameEncoder.encodeRegister(
-                        appName = appName,
-                        packageName = packageName,
-                        random = random,
-                        androidId = getAndroidId(),
-                        deviceName = getDeviceName()
-                    )
-                    android.util.Log.d("BleClient", "REGISTER frame: ${registerFrame.size} bytes")
-
-
-                    val service = gatt.getService(BleClient.SERVICE_UUID)
-                    if (service == null) {
-                        android.util.Log.e("Pairing", "Service not found: ${BleClient.SERVICE_UUID}")
-                        callback.onError(SdkError.ServiceNotFound())
-                        return
-                    }
-                    val characteristic = service.getCharacteristic(BleClient.WRITE_CHARACTERISTIC_UUID)
-                    if (characteristic == null) {
-                        android.util.Log.e("Pairing", "Characteristic not found: ${BleClient.WRITE_CHARACTERISTIC_UUID}")
-                        callback.onError(SdkError.ServiceNotFound())
-                        return
-                    }
-                    val writeOk = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, registerFrame)
-                    android.util.Log.d("BleClient", "writeCharacteristic returned: $writeOk")
-
-                    // 异步发送 APP 图标（延迟 300ms，避开 REGISTER 帧底层的 GATT Write Pending 状态）
                     Thread {
-                        try { Thread.sleep(300) } catch (_: InterruptedException) {}
+                        val registerFrame = FrameEncoder.encodeRegister(
+                            appName = appName,
+                            packageName = packageName,
+                            random = random,
+                            androidId = getAndroidId(),
+                            deviceName = getDeviceName()
+                        )
+                        android.util.Log.d("BleClient", "REGISTER frame: ${registerFrame.size} bytes")
+
+                        val service = gatt.getService(BleClient.SERVICE_UUID)
+                        if (service == null) {
+                            android.util.Log.e("Pairing", "Service not found: ${BleClient.SERVICE_UUID}")
+                            com.ble.notification.ble.BleClient.disconnectAndClose(gatt)
+                            currentState = PairingState.IDLE
+                            callback.onError(SdkError.ServiceNotFound())
+                            return@Thread
+                        }
+                        val characteristic = service.getCharacteristic(BleClient.WRITE_CHARACTERISTIC_UUID)
+                        if (characteristic == null) {
+                            android.util.Log.e("Pairing", "Characteristic not found: ${BleClient.WRITE_CHARACTERISTIC_UUID}")
+                            com.ble.notification.ble.BleClient.disconnectAndClose(gatt)
+                            currentState = PairingState.IDLE
+                            callback.onError(SdkError.ServiceNotFound())
+                            return@Thread
+                        }
+
+                        var writeOk = false
+                        for (retry in 0 until 3) {
+                            writeOk = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, registerFrame)
+                            if (writeOk) break
+                            try { Thread.sleep(50) } catch (_: InterruptedException) {}
+                        }
+                        android.util.Log.d("BleClient", "writeCharacteristic returned: $writeOk")
+
+                        if (!writeOk) {
+                            com.ble.notification.ble.BleClient.disconnectAndClose(gatt)
+                            currentState = PairingState.IDLE
+                            callback.onError(SdkError.ConnectionFailed("REGISTER frame write failed"))
+                            return@Thread
+                        }
+
+                        // 稍微等待对端 WinRT 处理完 REGISTER 帧
+                        try { Thread.sleep(150) } catch (_: InterruptedException) {}
+
+                        // 同步发送 APP 图标
                         sendAppIcon(gatt, characteristic, packageName)
+
+                        // 安全延时 300ms，确保 WinRT 端异步完成最终帧处理与落库
+                        try { Thread.sleep(300) } catch (_: InterruptedException) {}
+
+                        // 优雅断开并释放 GATT
+                        com.ble.notification.ble.BleClient.disconnectAndClose(gatt)
+
+                        val baseKey = deriveBaseKey(packageName, random)
+                        val deviceName = qrResult.name ?: gatt.device.name ?: "PC Device"
+                        android.util.Log.d(
+                            "BleClient",
+                            "Saving pairing: pc_uuid=${qrResult.uuid} pc_name=$deviceName android_id=${getAndroidId()} phone_device=${getDeviceName()}"
+                        )
+
+                        savePairing(qrResult.uuid, deviceName, appName, baseKey)
+                        transitionTo(PairingState.PAIRED, callback)
+                        callback.onPaired()
+                        currentState = PairingState.IDLE
                     }.start()
-
-                    val baseKey = deriveBaseKey(packageName, random)
-                    val actualMac = gatt.device.address
-                    val deviceName = qrResult.name ?: gatt.device.name ?: "PC Device"
-                    android.util.Log.d(
-                        "BleClient",
-                        "Saving pairing: pc_uuid=${qrResult.uuid} pc_name=$deviceName android_id=${getAndroidId()} phone_device=${getDeviceName()}"
-                    )
-
-                    savePairing(qrResult.uuid, deviceName, appName, baseKey)
-                    transitionTo(PairingState.PAIRED, callback)
-                    callback.onPaired()
-                    currentState = PairingState.IDLE
                 }
 
                 override fun onError(error: SdkError) {

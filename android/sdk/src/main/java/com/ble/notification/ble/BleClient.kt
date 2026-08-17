@@ -34,6 +34,20 @@ class BleClient(private val context: Context) {
             }
             return required.filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }.toTypedArray()
         }
+
+        fun disconnectAndClose(gatt: BluetoothGatt?) {
+            if (gatt == null) return
+            try {
+                gatt.disconnect()
+            } catch (e: Exception) {
+                android.util.Log.e("BleClient", "Gatt disconnect error: ${e.message}")
+            }
+            try {
+                gatt.close()
+            } catch (e: Exception) {
+                android.util.Log.e("BleClient", "Gatt close error: ${e.message}")
+            }
+        }
     }
 
     private var servicesDone = false
@@ -182,12 +196,7 @@ class BleClient(private val context: Context) {
                 else { callback.onError(SdkError.ConnectionFailed("mtu:$status")); try { gatt.close() } catch (_: Exception) {} }
             }
             override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-                android.util.Log.d("BleClient", "onCharacteristicWrite: status=$status. Initiating disconnect.")
-                try {
-                    gatt.disconnect()
-                } catch (e: Exception) {
-                    android.util.Log.e("BleClient", "Gatt disconnect error: ${e.message}")
-                }
+                android.util.Log.d("BleClient", "onCharacteristicWrite: status=$status")
             }
         }, android.bluetooth.BluetoothDevice.TRANSPORT_LE)
     }

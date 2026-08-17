@@ -129,9 +129,19 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
     // ── 配对流程 ──
 
-    fun startPairingDirectly(activity: FragmentActivity, qrResult: com.ble.notification.qr.QrResult, callback: PairingCallback) {
+    fun startPairingDirectly(
+        activity: FragmentActivity,
+        qrResult: com.ble.notification.qr.QrResult,
+        callback: PairingCallback,
+        appName: String? = null
+    ) {
         if (checkClosed(callback)) return
-        val appName = "DeviceManager"
+        val resolvedAppName = appName ?: try {
+            val pm = context.packageManager
+            pm.getApplicationLabel(context.applicationInfo).toString()
+        } catch (_: Exception) {
+            "BleSyncApp"
+        }
         val packageName = context.packageName
 
         if (isPaired(qrResult.uuid)) {
@@ -141,7 +151,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
 
         callback.onQrResult(qrResult.mac ?: "", qrResult.uuid)
 
-        pairingManager.startPairing(qrResult, appName, packageName, object : PairingCallback {
+        pairingManager.startPairing(qrResult, resolvedAppName, packageName, object : PairingCallback {
             override fun onScanSuccess() = callback.onScanSuccess()
             override fun onConnecting() = callback.onConnecting()
             override fun onRegistering() = callback.onRegistering()
@@ -163,7 +173,7 @@ class BleNotificationSDK private constructor(private val context: Context) {
                 return@showQrScanner
             }
 
-            startPairingDirectly(activity, qrResult, callback)
+            startPairingDirectly(activity, qrResult, callback, appName)
         }
     }
 

@@ -76,7 +76,7 @@ class BleForegroundService : Service() {
                 if (characteristic == null) {
                     android.util.Log.e("BleClient", "BleForegroundService: characteristic not found")
                     sdk.notifySendResult(sendId, false, SdkError.ServiceNotFound())
-                    try { gatt.close() } catch (_: Exception) {}
+                    BleClient.disconnectAndClose(gatt)
                     stopSelf()
                     return
                 }
@@ -88,8 +88,11 @@ class BleForegroundService : Service() {
                 } else {
                     sdk.notifySendResult(sendId, false, SdkError.Unknown("Gatt write failed"))
                 }
-                // 这里只负责 stopSelf() 服务自身生命周期结束，Gatt 的 close 由 BleClient 中的回调自动闭环
-                Handler(Looper.getMainLooper()).postDelayed({ stopSelf() }, 1500)
+                // 延时 500ms 优雅断开 GATT，给对端 WinRT 留出数据读取时间，并在 1000ms 后 stopSelf()
+                Handler(Looper.getMainLooper()).postDelayed({
+                    BleClient.disconnectAndClose(gatt)
+                }, 500)
+                Handler(Looper.getMainLooper()).postDelayed({ stopSelf() }, 1000)
 
             }
 

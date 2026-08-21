@@ -109,11 +109,21 @@ class BleClient(private val context: Context) {
             }
             override fun onScanFailed(errorCode: Int) {
                 android.util.Log.e("BleClient", "Scan failed: errorCode=$errorCode")
+                if (!finished) {
+                    finished = true
+                    handler.removeCallbacksAndMessages(null)
+                    try { scanner.stopScan(this) } catch (_: Exception) {}
+                    callback.onError(SdkError.ConnectionFailed("scan failed: errorCode=$errorCode"))
+                }
             }
         }
         handler.postDelayed({
-            if (!finished) { finished = true; scanner.stopScan(cb); callback.onError(SdkError.ConnectionFailed("scan timeout")) }
-        }, 10_000)
+            if (!finished) {
+                finished = true
+                try { scanner.stopScan(cb) } catch (_: Exception) {}
+                callback.onError(SdkError.ConnectionFailed("scan timeout"))
+            }
+        }, 5_000)
 
         val deviceNames = com.ble.notification.pairing.PairingManager(context.applicationContext)
             .getPairedDevices()

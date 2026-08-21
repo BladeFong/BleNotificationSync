@@ -23,8 +23,6 @@ class BleForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null) { stopSelf(); return START_NOT_STICKY }
-
         val channelId = BleNotificationSDK.getServiceChannelId(this)
         BleNotificationSDK.createServiceNotificationChannel(this)
 
@@ -33,7 +31,6 @@ class BleForegroundService : Service() {
             .setContentTitle(getString(R.string.s_foreground_notify_title))
             .setContentText(getString(R.string.s_foreground_scanning))
             .setSmallIcon(appIcon)
-            .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setSilent(true)
             .build()
@@ -47,26 +44,48 @@ class BleForegroundService : Service() {
             this, NOTIFICATION_ID, notification, serviceType
         )
 
+        if (intent == null) {
+            stopServiceGracefully()
+            return START_NOT_STICKY
+        }
 
         val title = intent.getStringExtra(EXTRA_TITLE) ?: ""
         val body = intent.getStringExtra(EXTRA_BODY) ?: ""
         val sendId = intent.getStringExtra(EXTRA_SEND_ID) ?: ""
 
         scanAndSend(title, body, sendId)
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    private fun stopServiceGracefully() {
+        try {
+            androidx.core.app.ServiceCompat.stopForeground(this, androidx.core.app.ServiceCompat.STOP_FOREGROUND_REMOVE)
+        } catch (_: Exception) {}
+        val nm = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+        nm?.cancel(NOTIFICATION_ID)
+        stopSelf()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            androidx.core.app.ServiceCompat.stopForeground(this, androidx.core.app.ServiceCompat.STOP_FOREGROUND_REMOVE)
+        } catch (_: Exception) {}
+        val nm = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+        nm?.cancel(NOTIFICATION_ID)
     }
 
     private fun scanAndSend(title: String, body: String, sendId: String) {
         val client = BleClient(applicationContext)
         client.connectWithScan(object : ConnectionCallback {
             override fun onReady(gatt: android.bluetooth.BluetoothGatt) {
-                val sdk = try { BleNotificationSDK.init(applicationContext) } catch (_: Exception) { stopSelf(); return }
+                val sdk = try { BleNotificationSDK.init(applicationContext) } catch (_: Exception) { stopServiceGracefully(); return }
                 val pm = PairingManager(applicationContext)
                 val devices = pm.getPairedDevices()
                 val baseKey = devices.firstOrNull()?.let { pm.getBaseKey(it.uuid) } ?: run {
                     android.util.Log.e("BleClient", "BleForegroundService: no paired device key found")
                     sdk.notifySendResult(sendId, false, SdkError.NotPaired())
-                    stopSelf()
+                    stopServiceGracefully()
                     return
                 }
 
@@ -77,7 +96,7 @@ class BleForegroundService : Service() {
                     android.util.Log.e("BleClient", "BleForegroundService: characteristic not found")
                     sdk.notifySendResult(sendId, false, SdkError.ServiceNotFound())
                     BleClient.disconnectAndClose(gatt)
-                    stopSelf()
+                    stopServiceGracefully()
                     return
                 }
                 val sent = com.ble.notification.ble.BleCompat.writeCharacteristic(gatt, characteristic, frame)
@@ -88,17 +107,19 @@ class BleForegroundService : Service() {
                 } else {
                     sdk.notifySendResult(sendId, false, SdkError.Unknown("Gatt write failed"))
                 }
-                // 延时 500ms 优雅断开 GATT，给对端 WinRT 留出数据读取时间，并在 1000ms 后 stopSelf()
+                // 延时 500ms 优雅断开 GATT，给对端 WinRT 留出数据读取时间，并在 1000ms 后优雅停止服务
                 Handler(Looper.getMainLooper()).postDelayed({
                     BleClient.disconnectAndClose(gatt)
                 }, 500)
-                Handler(Looper.getMainLooper()).postDelayed({ stopSelf() }, 1000)
+                Handler(Looper.getMainLooper()).postDelayed({
+                    stopServiceGracefully()
+                }, 1000)
 
             }
 
             override fun onError(error: SdkError) {
                 try { BleNotificationSDK.init(applicationContext).notifySendResult(sendId, false, error) } catch (_: Exception) {}
-                stopSelf()
+                stopServiceGracefully()
             }
         })
     }

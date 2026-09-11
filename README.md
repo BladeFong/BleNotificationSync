@@ -1,15 +1,20 @@
 # BleNotificationSync
 
+**简体中文** | [English](README.en.md)
+
+![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-blue)
+![Android API](https://img.shields.io/badge/Android-API%2023%2B-blue)
+![Desktop](https://img.shields.io/badge/desktop-Tauri%202%20%2F%20Rust-blue)
+![BLE](https://img.shields.io/badge/BLE-GATT-blue)
+![Encryption](https://img.shields.io/badge/encryption-AES--256--GCM-blue)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
+
 基于 BLE（低功耗蓝牙）的跨平台通知同步系统。在无网、无账号、无云端服务器的环境下，实现 Android 手机通知（如闹钟、提醒事项）到桌面端（Windows / macOS / Linux）的近场即时推送与系统通知提醒。
 
 <p align="center">
-  <img src="docs/images/architecture.png" alt="系统架构图" width="720" />
-</p>
-
-<p align="center">
-  <img src="docs/images/pairing-demo.gif" alt="扫码配对与通知同步演示" width="360" />
+  <img src="assets/readme/pairing-demo.gif" alt="扫码配对与通知同步演示" width="360" />
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/images/desktop-preview.png" alt="桌面端接收效果" width="400" />
+  <img src="assets/readme/desktop-preview.png" alt="桌面端接收效果" width="400" />
 </p>
 
 ---

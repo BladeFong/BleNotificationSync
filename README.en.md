@@ -12,9 +12,7 @@
 A cross-platform notification sync system based on BLE (Bluetooth Low Energy). It pushes Android notifications (such as alarms and reminders) to desktop systems (Windows / macOS / Linux) in near-field, real-time fashion — with no internet, no account, and no cloud server involved.
 
 <p align="center">
-  <img src="assets/readme/pairing-demo.gif" alt="QR pairing and notification sync demo" width="360" />
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/readme/desktop-preview.png" alt="Desktop notification preview" width="400" />
+  <img src="assets/readme/pairing-demo.gif" alt="QR pairing and notification sync demo" width="720" />
 </p>
 
 ---

@@ -12,9 +12,7 @@
 基于 BLE（低功耗蓝牙）的跨平台通知同步系统。在无网、无账号、无云端服务器的环境下，实现 Android 手机通知（如闹钟、提醒事项）到桌面端（Windows / macOS / Linux）的近场即时推送与系统通知提醒。
 
 <p align="center">
-  <img src="assets/readme/pairing-demo.gif" alt="扫码配对与通知同步演示" width="360" />
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/readme/desktop-preview.png" alt="桌面端接收效果" width="400" />
+  <img src="assets/readme/pairing-demo.gif" alt="扫码配对与通知同步演示" width="720" />
 </p>
 
 ---
